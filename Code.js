@@ -7,7 +7,11 @@ const CONFIG = {
   ALLOW_DOMAIN_ONLY: true,
   ALLOWED_DOMAIN: 'firstconnecthealth.com',
   DEFAULT_CERTIFICATE_FOLDER_NAME: 'Training Portal Certificates',
-  PASS_PERCENT: 70
+  PASS_PERCENT: 70,
+  NO_REPLY_EMAIL: 'no-reply@firstconnecthealth.com',
+  OTP_EXPIRY_SECONDS: 300,
+  OTP_SEND_COOLDOWN_SECONDS: 60,
+  OTP_MAX_VERIFY_ATTEMPTS: 5
 };
 
 function doGet() {
@@ -124,7 +128,7 @@ function getPortalBootstrap() {
 
   const progressSummary = getProgressSummary_(ss, user.email);
   const quizSummary = getQuizSummary_(ss, user.email);
-  const dashboardStats = getDashboardStatsLight_(ss, user.email);
+  const dashboardStats = getDashboardStatsLight_(ss, user.email, progressSummary, quizSummary);
 
   portalData.auth = authState;
   portalData.dailyLearning = {
@@ -556,24 +560,24 @@ function updateUserStreak_(ss, email, xpEarned) {
   sh.appendRow([email, 1, 1, Number(xpEarned || 0), today]);
 }
 
-function getDashboardStatsLight_(ss, email) {
+function getDashboardStatsLight_(ss, email, progressSummary, quizSummary) {
   const updates = getUpdatesCached_(ss);
-  const progressSummary = getProgressSummary_(ss, email);
-  const quizSummary = getQuizSummary_(ss, email);
+  const effectiveProgressSummary = progressSummary || getProgressSummary_(ss, email);
+  const effectiveQuizSummary = quizSummary || getQuizSummary_(ss, email);
   const modules = getModulesCached_(ss);
 
   return {
     moduleCount: modules.length,
     resourceCount: 0,
     updateCount: updates.length,
-    progressPercent: progressSummary.progressPercent,
-    completedLessons: progressSummary.completedLessons,
-    totalLessons: progressSummary.totalLessons,
-    currentWeek: progressSummary.currentWeek,
-    nextTask: progressSummary.nextTask,
-    quizzesTaken: quizSummary.quizzesTaken,
-    avgQuizScore: quizSummary.avgQuizScore,
-    certificatesEarned: quizSummary.certificatesEarned
+    progressPercent: effectiveProgressSummary.progressPercent,
+    completedLessons: effectiveProgressSummary.completedLessons,
+    totalLessons: effectiveProgressSummary.totalLessons,
+    currentWeek: effectiveProgressSummary.currentWeek,
+    nextTask: effectiveProgressSummary.nextTask,
+    quizzesTaken: effectiveQuizSummary.quizzesTaken,
+    avgQuizScore: effectiveQuizSummary.avgQuizScore,
+    certificatesEarned: effectiveQuizSummary.certificatesEarned
   };
 }
 
@@ -1621,6 +1625,12 @@ function buildPortalOtpVerifiedCacheKey_(email) {
 function buildPortalOtpReverifyCacheKey_(email) {
   return 'portal_otp_reverify_' + String(email || '').trim().toLowerCase();
 }
+function buildPortalOtpAttemptsCacheKey_(email) {
+  return 'portal_otp_attempts_' + String(email || '').trim().toLowerCase();
+}
+function buildPortalOtpCooldownCacheKey_(email) {
+  return 'portal_otp_cooldown_' + String(email || '').trim().toLowerCase();
+}
 function isPortalOtpVerified_(email) {
   const cache = CacheService.getScriptCache();
   const value = cache.get(buildPortalOtpVerifiedCacheKey_(email));
@@ -1644,6 +1654,7 @@ function clearPortalOtpVerified_(email) {
 function clearPortalOtpCode_(email) {
   const cache = CacheService.getScriptCache();
   cache.remove(buildPortalOtpCacheKey_(email));
+  cache.remove(buildPortalOtpAttemptsCacheKey_(email));
 }
 function getAuthBootstrap_(ss, user) {
   const access = evaluateUserAccess_(user);
@@ -1684,15 +1695,32 @@ function sendLoginOtp() {
   const ctx = requireEnabledPortalUser_();
   const email = String(ctx.user.email || '').trim().toLowerCase();
   const cache = CacheService.getScriptCache();
+  const lock = LockService.getScriptLock();
   const otp = String(Math.floor(100000 + Math.random() * 900000));
-  const preferredAlias = 'no-reply@firstconnecthealth.com';
+  const preferredAlias = String(CONFIG.NO_REPLY_EMAIL || '').trim().toLowerCase();
 
   if (!email || email === 'not available') {
     throw new Error('User email is not available.');
   }
 
-  cache.put(buildPortalOtpCacheKey_(email), otp, 300);
-  cache.remove(buildPortalOtpVerifiedCacheKey_(email));
+  lock.waitLock(3000);
+  try {
+    const cooldownKey = buildPortalOtpCooldownCacheKey_(email);
+    const cooldownActive = cache.get(cooldownKey);
+    if (cooldownActive) {
+      return {
+        success: false,
+        message: 'Please wait 60 seconds before requesting another OTP.'
+      };
+    }
+
+    cache.put(buildPortalOtpCacheKey_(email), otp, Number(CONFIG.OTP_EXPIRY_SECONDS || 300));
+    cache.put(buildPortalOtpAttemptsCacheKey_(email), '0', Number(CONFIG.OTP_EXPIRY_SECONDS || 300));
+    cache.put(cooldownKey, 'Y', Number(CONFIG.OTP_SEND_COOLDOWN_SECONDS || 60));
+    cache.remove(buildPortalOtpVerifiedCacheKey_(email));
+  } finally {
+    lock.releaseLock();
+  }
 
   const subject = 'Training Portal OTP';
   const body = [
@@ -1737,6 +1765,9 @@ function verifyLoginOtp(otp) {
   const inputOtp = String(otp || '').trim();
   const cache = CacheService.getScriptCache();
   const savedOtp = String(cache.get(buildPortalOtpCacheKey_(email)) || '').trim();
+  const attemptsKey = buildPortalOtpAttemptsCacheKey_(email);
+  const maxAttempts = Number(CONFIG.OTP_MAX_VERIFY_ATTEMPTS || 5);
+  const attemptsUsed = Number(cache.get(attemptsKey) || 0);
 
   if (!/^\d{6}$/.test(inputOtp)) {
     return {
@@ -1753,9 +1784,20 @@ function verifyLoginOtp(otp) {
   }
 
   if (savedOtp !== inputOtp) {
+    const updatedAttempts = attemptsUsed + 1;
+    cache.put(attemptsKey, String(updatedAttempts), Number(CONFIG.OTP_EXPIRY_SECONDS || 300));
+
+    if (updatedAttempts >= maxAttempts) {
+      clearPortalOtpCode_(email);
+      return {
+        success: false,
+        message: 'Too many invalid attempts. Please request a new OTP.'
+      };
+    }
+
     return {
       success: false,
-      message: 'Invalid OTP.'
+      message: 'Invalid OTP. Attempts left: ' + Math.max(0, maxAttempts - updatedAttempts)
     };
   }
 
@@ -1919,6 +1961,10 @@ function addUpdate(payload) {
   const ss = getOrCreateSpreadsheet_();
   const sh = ss.getSheetByName('Updates');
   sh.appendRow(['Y', title, message, type]);
+  logAdminAction_(ss, user.email, 'ADD_UPDATE', {
+    title: title,
+    type: type
+  });
 
   return getUpdates_(ss);
 }
@@ -1948,7 +1994,23 @@ function addUser(payload) {
   }
 
   sh.appendRow([email, name, role, 'Y']);
+  logAdminAction_(ss, user.email, 'ADD_USER', {
+    email: email,
+    role: role
+  });
   return getUsers_(ss);
+}
+
+function logAdminAction_(ss, actorEmail, actionName, details) {
+  const sh = ss.getSheetByName('AdminActionLog');
+  if (!sh) return;
+
+  sh.appendRow([
+    new Date(),
+    String(actorEmail || '').trim().toLowerCase(),
+    String(actionName || '').trim(),
+    JSON.stringify(details || {})
+  ]);
 }
 
 function getAdminUserProgressReport() {
@@ -2013,6 +2075,7 @@ function getOrCreateSpreadsheet_() {
   ensureSheet_(ss, 'DailyLearning', ['Enabled', 'Type', 'Title', 'Content', 'Subtext', 'Tag', 'Option A', 'Option B', 'Option C', 'Option D', 'Correct Option', 'Display Order', 'Card ID', 'Audience', 'XP']);
   ensureSheet_(ss, 'DailyLearningProgress', ['Email', 'Type', 'Title', 'Content', 'Tag', 'Card ID', 'XP Earned', 'Learned At']);
   ensureSheet_(ss, 'UserStreaks', ['Email', 'Current Streak', 'Best Streak', 'Total XP', 'Last Learned Date']);
+  ensureSheet_(ss, 'AdminActionLog', ['Timestamp', 'Actor Email', 'Action', 'Details JSON']);
   return ss;
 }
 
@@ -2176,4 +2239,3 @@ function escapeHtmlServer_(value) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
-

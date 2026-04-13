@@ -25,7 +25,8 @@
     authMessage: '',
     otpValue: '',
     inactivityMinutes: 60,
-    inactivityTimerId: null
+    inactivityTimerId: null,
+    lastActivityPingAt: 0
   };
 function getShuffledDailyLearningCard() {
   const data = ((state || {}).data || {}).dailyLearning || {};
@@ -2385,6 +2386,12 @@ function renderDashboardPage() {
   }
 
   function notifyUserActivity() {
+    const now = Date.now();
+    if ((now - Number(state.lastActivityPingAt || 0)) < 60000) {
+      return;
+    }
+    state.lastActivityPingAt = now;
+
     google.script.run
       .withFailureHandler(function(err) {
         console.error('Activity update failed', err);
@@ -2452,6 +2459,9 @@ function renderDashboardPage() {
         if (response && typeof response === 'object') {
           if (response.answer) {
             assistantText = String(response.answer);
+          }
+          if (Array.isArray(response.suggestions) && response.suggestions.length) {
+            assistantText += '\n\nTry asking:\n- ' + response.suggestions.join('\n- ');
           }
 
           if (Array.isArray(response.links)) {
@@ -3081,7 +3091,7 @@ function renderDashboardPage() {
       .refreshPortalData();
   }
 
-  function switchPage(page) {
+function switchPage(page) {
   state.currentPage = page;
 
   if (page === 'training' && (!state.data.modules || !state.data.modules.length)) {
@@ -3146,7 +3156,26 @@ function renderDashboardPage() {
     return;
   }
 
-  renderApp();
+  applyPageSwitchUi_();
+}
+
+function applyPageSwitchUi_() {
+  document.querySelectorAll('.page').forEach(function(section) {
+    section.classList.remove('active');
+  });
+  const activePage = document.getElementById('page-' + state.currentPage);
+  if (activePage) {
+    activePage.classList.add('active');
+  }
+
+  document.querySelectorAll('.menu-btn').forEach(function(btn) {
+    const page = String(btn.getAttribute('data-page') || '').trim();
+    if (page === state.currentPage) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
 }
 
   function openModuleQuiz(moduleId) {

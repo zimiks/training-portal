@@ -1,5 +1,6 @@
 const KNOWLEDGE_SPREADSHEET_ID = '11hc9yxH9F6P8SMQ62ry42WgPYmOPuSOj02U18XD9R1M';
 const ASSISTANT_SHEET_NAME = 'AI_Chatbot_Knowledge';
+const ASSISTANT_UNANSWERED_SHEET_NAME = 'AI_Unanswered_Log';
 
 /**
  * Grounded assistant backend
@@ -7,7 +8,8 @@ const ASSISTANT_SHEET_NAME = 'AI_Chatbot_Knowledge';
  */
 function askAssistant(question) {
   try {
-    const cleanQuestion = normalizeAssistantText_(question);
+    const rawQuestion = String(question || '').trim();
+    const cleanQuestion = normalizeAssistantText_(rawQuestion);
 
     if (!cleanQuestion) {
       return {
@@ -17,13 +19,16 @@ function askAssistant(question) {
       };
     }
 
-    const match = findBestAssistantAnswer_(cleanQuestion);
+    const matchResult = findBestAssistantAnswer_(cleanQuestion);
+    const match = matchResult.match;
 
     if (!match) {
+      logUnansweredAssistantQuestion_(rawQuestion, cleanQuestion);
       return {
         ok: true,
-        answer: 'I could not find a grounded answer in AI_Chatbot_Knowledge for that question. Please try rephrasing it or update the knowledge sheet.',
-        links: []
+        answer: 'I could not find a grounded answer in AI_Chatbot_Knowledge. Please rephrase your question or contact support.',
+        links: [],
+        suggestions: matchResult.suggestions
       };
     }
 
@@ -32,7 +37,9 @@ function askAssistant(question) {
       answer: match.answer,
       links: match.links,
       matchedQuestion: match.mainQuestion,
-      rowId: match.id || ''
+      rowId: match.id || '',
+      confidence: match.score || 0,
+      suggestions: matchResult.suggestions
     };
   } catch (error) {
     Logger.log('askAssistant error: ' + error);
@@ -45,10 +52,18 @@ function askAssistant(question) {
 }
 
 function getAssistantSpreadsheet_() {
-  return SpreadsheetApp.openById('11hc9yxH9F6P8SMQ62ry42WgPYmOPuSOj02U18XD9R1M');
+  return SpreadsheetApp.openById(KNOWLEDGE_SPREADSHEET_ID);
 }
 
-function findBestAssistantAnswer_(cleanQuestion) {
+function getAssistantKnowledgeRows_() {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'assistant_knowledge_rows_v2';
+  const cached = cache.get(cacheKey);
+
+  if (cached) {
+    return JSON.parse(cached);
+  }
+
   const spreadsheet = getAssistantSpreadsheet_();
   const sheet = spreadsheet.getSheetByName(ASSISTANT_SHEET_NAME);
 
@@ -58,34 +73,48 @@ function findBestAssistantAnswer_(cleanQuestion) {
 
   const values = sheet.getDataRange().getDisplayValues();
   if (!values || values.length < 2) {
-    return null;
+    return { rows: [], headerMap: {} };
   }
 
   const headers = values[0];
   const rows = values.slice(1);
   const headerMap = buildAssistantHeaderMap_(headers);
+  const payload = {
+    rows: rows,
+    headerMap: headerMap
+  };
 
-  // 1. Exact full match
+  cache.put(cacheKey, JSON.stringify(payload), 300);
+  return payload;
+}
+
+function findBestAssistantAnswer_(cleanQuestion) {
+  const knowledge = getAssistantKnowledgeRows_();
+  const rows = knowledge.rows || [];
+  const headerMap = knowledge.headerMap || {};
+
+  if (!rows.length) {
+    return { match: null, suggestions: [] };
+  }
+
   const exactMatch = findExactAssistantMatch_(rows, headerMap, cleanQuestion);
   if (exactMatch) {
-    return exactMatch;
+    return { match: exactMatch, suggestions: [] };
   }
 
-  // 2. Acronym-first match
   const acronymMatch = findAssistantAcronymMatch_(rows, headerMap, cleanQuestion);
   if (acronymMatch) {
-    return acronymMatch;
+    return { match: acronymMatch, suggestions: [] };
   }
 
-  // 3. Phrase-first match
   const phraseMatch = findAssistantPhraseMatch_(rows, headerMap, cleanQuestion);
   if (phraseMatch) {
-    return phraseMatch;
+    return { match: phraseMatch, suggestions: [] };
   }
 
-  // 4. Scored fallback
   let bestRow = null;
   let bestScore = 0;
+  const candidates = [];
 
   rows.forEach(function(row) {
     const answer = safeCell_(row, headerMap, 'Answer').trim();
@@ -104,14 +133,62 @@ function findBestAssistantAnswer_(cleanQuestion) {
       bestScore = score;
       bestRow = row;
     }
+
+    if (score > 0) {
+      candidates.push({
+        score: score,
+        mainQuestion: safeCell_(row, headerMap, 'Main Question').trim()
+      });
+    }
   });
 
+  candidates.sort(function(a, b) {
+    return b.score - a.score;
+  });
+
+  const suggestions = candidates.slice(0, 3).map(function(item) {
+    return item.mainQuestion;
+  }).filter(Boolean);
+
   if (!bestRow || bestScore < 8) {
-    return null;
+    return {
+      match: null,
+      suggestions: suggestions
+    };
   }
 
-  return buildAssistantResult_(bestRow, headerMap, bestScore);
+  return {
+    match: buildAssistantResult_(bestRow, headerMap, bestScore),
+    suggestions: suggestions
+  };
 }
+
+function logUnansweredAssistantQuestion_(rawQuestion, cleanQuestion) {
+  const spreadsheet = getAssistantSpreadsheet_();
+  const sheet = ensureAssistantUnansweredSheet_(spreadsheet);
+  const user = typeof getUserInfo_ === 'function' ? getUserInfo_() : { email: '' };
+
+  sheet.appendRow([
+    new Date(),
+    String((user || {}).email || '').trim().toLowerCase(),
+    rawQuestion,
+    cleanQuestion
+  ]);
+}
+
+function ensureAssistantUnansweredSheet_(spreadsheet) {
+  let sheet = spreadsheet.getSheetByName(ASSISTANT_UNANSWERED_SHEET_NAME);
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(ASSISTANT_UNANSWERED_SHEET_NAME);
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'User Email', 'Original Question', 'Normalized Question']);
+  }
+
+  return sheet;
+}
+
 function findExactAssistantMatch_(rows, headerMap, cleanQuestion) {
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i];
@@ -152,23 +229,15 @@ function findAssistantAcronymMatch_(rows, headerMap, cleanQuestion) {
     var answer = safeCell_(row, headerMap, 'Answer').trim();
     if (!answer) continue;
 
-    var mainQuestionRaw = safeCell_(row, headerMap, 'Main Question');
-    var alternateRaw = safeCell_(row, headerMap, 'Alternate Questions');
-    var keywordsRaw = safeCell_(row, headerMap, 'Keywords');
-
-    var candidates = [mainQuestionRaw]
-      .concat(splitAssistantTermsRaw_(alternateRaw))
-      .concat(splitAssistantTermsRaw_(keywordsRaw));
+    var candidates = [safeCell_(row, headerMap, 'Main Question')]
+      .concat(splitAssistantTermsRaw_(safeCell_(row, headerMap, 'Alternate Questions')))
+      .concat(splitAssistantTermsRaw_(safeCell_(row, headerMap, 'Keywords')));
 
     for (var j = 0; j < candidates.length; j++) {
       var candidate = normalizeAssistantText_(candidates[j]);
       if (!candidate) continue;
 
-      if (candidate === cleanQuestion) {
-        return buildAssistantResult_(row, headerMap, 880);
-      }
-
-      if (extractAcronym_(candidate) === cleanQuestion) {
+      if (candidate === cleanQuestion || extractAcronym_(candidate) === cleanQuestion) {
         return buildAssistantResult_(row, headerMap, 860);
       }
     }
@@ -191,29 +260,20 @@ function findAssistantPhraseMatch_(rows, headerMap, cleanQuestion) {
     var alternates = splitAssistantTerms_(safeCell_(row, headerMap, 'Alternate Questions'));
     var keywords = splitAssistantTerms_(safeCell_(row, headerMap, 'Keywords'));
 
-    if (mainQuestion && (
-      mainQuestion.indexOf(cleanQuestion) === 0 ||
-      cleanQuestion.indexOf(mainQuestion) === 0
-    )) {
+    if (mainQuestion && (mainQuestion.indexOf(cleanQuestion) === 0 || cleanQuestion.indexOf(mainQuestion) === 0)) {
       return buildAssistantResult_(row, headerMap, 700);
     }
 
     for (var j = 0; j < alternates.length; j++) {
       var alt = alternates[j];
-      if (
-        alt.indexOf(cleanQuestion) === 0 ||
-        cleanQuestion.indexOf(alt) === 0
-      ) {
+      if (alt.indexOf(cleanQuestion) === 0 || cleanQuestion.indexOf(alt) === 0) {
         return buildAssistantResult_(row, headerMap, 680);
       }
     }
 
     for (var k = 0; k < keywords.length; k++) {
       var keyword = keywords[k];
-      if (
-        keyword.indexOf(cleanQuestion) === 0 ||
-        cleanQuestion.indexOf(keyword) === 0
-      ) {
+      if (keyword.indexOf(cleanQuestion) === 0 || cleanQuestion.indexOf(keyword) === 0) {
         return buildAssistantResult_(row, headerMap, 650);
       }
     }
@@ -256,9 +316,7 @@ function isLikelyAcronym_(value) {
 }
 
 function extractAcronym_(text) {
-  var tokens = normalizeAssistantText_(text)
-    .split(' ')
-    .filter(Boolean);
+  var tokens = normalizeAssistantText_(text).split(' ').filter(Boolean);
 
   if (!tokens.length) {
     return '';
@@ -287,57 +345,7 @@ function scoreAssistantAlternateQuestions_(questionText, alternateQuestionsText,
 
   return score;
 }
-function findExactAssistantMatch_(rows, headerMap, cleanQuestion) {
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
-    var answer = safeCell_(row, headerMap, 'Answer').trim();
-    if (!answer) continue;
 
-    var mainQuestion = normalizeAssistantText_(safeCell_(row, headerMap, 'Main Question'));
-    var alternateQuestionsRaw = safeCell_(row, headerMap, 'Alternate Questions');
-    var keywordsRaw = safeCell_(row, headerMap, 'Keywords');
-
-    // Exact main question match
-    if (mainQuestion && mainQuestion === cleanQuestion) {
-      return buildAssistantResult_(row, headerMap, 1000);
-    }
-
-    // Exact alternate question match
-    var alternateParts = splitAssistantTerms_(alternateQuestionsRaw);
-    for (var j = 0; j < alternateParts.length; j++) {
-      if (alternateParts[j] === cleanQuestion) {
-        return buildAssistantResult_(row, headerMap, 950);
-      }
-    }
-
-    // Exact keyword match
-    var keywordParts = splitAssistantTerms_(keywordsRaw);
-    for (var k = 0; k < keywordParts.length; k++) {
-      if (keywordParts[k] === cleanQuestion) {
-        return buildAssistantResult_(row, headerMap, 900);
-      }
-    }
-  }
-
-  return null;
-}
-function splitAssistantTerms_(value) {
-  return String(value || '')
-    .split(/[\n,;|]/)
-    .map(function(part) {
-      return normalizeAssistantText_(part);
-    })
-    .filter(Boolean);
-}
-function buildAssistantResult_(row, headerMap, score) {
-  return {
-    id: safeCell_(row, headerMap, 'ID'),
-    mainQuestion: safeCell_(row, headerMap, 'Main Question'),
-    answer: safeCell_(row, headerMap, 'Answer').trim(),
-    links: extractAssistantLinks_(row, headerMap),
-    score: score || 0
-  };
-}
 function extractAssistantLinks_(row, headerMap) {
   const links = [];
 
@@ -346,13 +354,8 @@ function extractAssistantLinks_(row, headerMap) {
   const title2 = safeCell_(row, headerMap, 'Link Title 2').trim();
   const url2 = safeCell_(row, headerMap, 'Link URL 2').trim();
 
-  if (title1 && url1) {
-    links.push({ title: title1, url: url1 });
-  }
-
-  if (title2 && url2) {
-    links.push({ title: title2, url: url2 });
-  }
+  if (title1 && url1) links.push({ title: title1, url: url1 });
+  if (title2 && url2) links.push({ title: title2, url: url2 });
 
   return links;
 }
@@ -400,35 +403,10 @@ function normalizeAssistantText_(value) {
 
 function tokenizeAssistantText_(value) {
   const stopWords = {
-    a: true,
-    an: true,
-    and: true,
-    are: true,
-    as: true,
-    at: true,
-    be: true,
-    by: true,
-    do: true,
-    for: true,
-    from: true,
-    how: true,
-    i: true,
-    in: true,
-    is: true,
-    it: true,
-    of: true,
-    on: true,
-    or: true,
-    the: true,
-    to: true,
-    what: true,
-    when: true,
-    where: true,
-    which: true,
-    who: true,
-    why: true,
-    with: true,
-    your: true
+    a: true, an: true, and: true, are: true, as: true, at: true, be: true, by: true,
+    do: true, for: true, from: true, how: true, i: true, in: true, is: true, it: true,
+    of: true, on: true, or: true, the: true, to: true, what: true, when: true,
+    where: true, which: true, who: true, why: true, with: true, your: true
   };
 
   return normalizeAssistantText_(value)
@@ -463,11 +441,8 @@ function scoreAssistantField_(questionText, fieldText, weight) {
   }
 
   let overlap = 0;
-
   qTokens.forEach(function(token) {
-    if (fTokens.indexOf(token) !== -1) {
-      overlap++;
-    }
+    if (fTokens.indexOf(token) !== -1) overlap++;
   });
 
   if (overlap === qTokens.length && overlap === fTokens.length) {
@@ -482,6 +457,7 @@ function scoreAssistantField_(questionText, fieldText, weight) {
 
   return score;
 }
+
 function scoreAssistantKeywords_(questionText, keywordsText, weight) {
   if (!questionText || !keywordsText) {
     return 0;
@@ -516,49 +492,15 @@ function scoreAssistantKeywords_(questionText, keywordsText, weight) {
 
     let overlap = 0;
     qTokens.forEach(function(token) {
-      if (kTokens.indexOf(token) !== -1) {
-        overlap++;
-      }
+      if (kTokens.indexOf(token) !== -1) overlap++;
     });
 
-    if (overlap === qTokens.length && overlap > 0) {
-      score += overlap * weight + 4;
-    } else if (overlap >= 2) {
+    if (overlap >= 2) {
       score += overlap * (weight - 1);
-    } else if (overlap === 1 && qTokens.length === 1 && kTokens.length === 1) {
+    } else if (overlap === 1 && qTokens.length === 1) {
       score += weight;
     }
   });
 
   return score;
-}
-function scoreAssistantAlternateQuestions_(questionText, alternateQuestionsText, weight) {
-  if (!questionText || !alternateQuestionsText) {
-    return 0;
-  }
-
-  const alternates = splitAssistantTerms_(alternateQuestionsText);
-  let score = 0;
-
-  alternates.forEach(function(alt) {
-    score += scoreAssistantField_(questionText, alt, weight);
-  });
-
-  return score;
-}
-
-function testAskAssistant() {
-  const tests = [
-    'What is W2?',
-    'What is ATS?',
-    'What is a compact license?',
-    'Explain PACU',
-    'How does submission readiness work?'
-  ];
-
-  tests.forEach(function(question) {
-    const result = askAssistant(question);
-    Logger.log('QUESTION: ' + question);
-    Logger.log(JSON.stringify(result, null, 2));
-  });
 }
