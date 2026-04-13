@@ -1,0 +1,3226 @@
+<script>
+  function getDriveImageUrlFromFileId(fileId, size) {
+    if (!fileId) return '';
+    return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(fileId) + '&sz=w' + (size || 1600);
+  }
+
+  const state = {
+    data: null,
+    currentPage: 'dashboard',
+    selectedModuleQuiz: '',
+    quizQuestions: [],
+    quizAnswers: {},
+    quizResult: null,
+    adminReport: [],
+    adminLoaded: false,
+    chatbotOpen: false,
+    chatbotMessages: [],
+    chatbotLoading: false,
+    chatbotInputDraft: '',
+    chatbotInitialized: false,
+
+    authRequired: false,
+    authBusy: false,
+    authMode: '',
+    authMessage: '',
+    otpValue: '',
+    inactivityMinutes: 60,
+    inactivityTimerId: null
+  };
+function getShuffledDailyLearningCard() {
+  const data = ((state || {}).data || {}).dailyLearning || {};
+  const items = Array.isArray(data.items) ? data.items.slice() : [];
+
+  if (!items.length) return null;
+
+  const current = data.todayCard || null;
+  const candidates = items.filter(function(item) {
+    if (!current) return true;
+
+    return !(
+      String(item.title || '') === String(current.title || '') &&
+      String(item.content || '') === String(current.content || '') &&
+      String(item.type || '') === String(current.type || '')
+    );
+  });
+
+  const pool = candidates.length ? candidates : items;
+  const index = Math.floor(Math.random() * pool.length);
+
+  return pool[index];
+}
+
+function renderDailyLearningCard() {
+  const block = ((state || {}).data || {}).dailyLearning || {};
+  const card = block.todayCard || null;
+  const progress = block.progress || { seenCardIds: [], learnedCardIds: [] };
+  const streak = block.streak || { currentStreak: 0, bestStreak: 0, totalXp: 0 };
+
+  if (!card) {
+    return `
+      <section class="section" style="margin-top:14px;">
+        <div class="card" style="border:1px solid #dbe8f3;background:#f8fbff;">
+          <div class="pill">Daily Learning</div>
+          <h3 style="margin-top:10px;">No daily learning card available</h3>
+          <p class="muted">Add enabled rows in the DailyLearning sheet to show staffing and recruiter learning content here.</p>
+        </div>
+      </section>
+    `;
+  }
+
+  const type = String(card.type || 'Tip');
+  const tag = String(card.tag || 'Daily Learning');
+  const title = String(card.title || '');
+  const content = String(card.content || '');
+  const subtext = String(card.subtext || '');
+  const cardId = String(card.cardId || '');
+  const xp = Number(card.xp || 5);
+
+  const isQuiz = type.toLowerCase() === 'quiz';
+  const isQuote = type.toLowerCase() === 'quote';
+  const seen = Array.isArray(progress.seenCardIds) && progress.seenCardIds.indexOf(cardId) > -1;
+  const learned = Array.isArray(progress.learnedCardIds) && progress.learnedCardIds.indexOf(cardId) > -1;
+
+  return `
+    <section class="section" style="margin-top:14px;">
+      <div
+        class="card"
+        style="
+          border:1px solid #dbe8f3;
+          background:linear-gradient(135deg,#f8fbff 0%, #ffffff 100%);
+          box-shadow:0 12px 28px rgba(15,79,134,0.08);
+        "
+      >
+        <div class="top-strip" style="margin-bottom:10px;align-items:flex-start;">
+          <div>
+            <div class="pill">Daily Learning Card</div>
+            <h3 style="margin:10px 0 0;">${escapeHtml(title || 'Daily Learning')}</h3>
+            <p class="page-subtitle" style="margin-top:8px;">A quick staffing and recruiter learning booster for freshers and new joiners.</p>
+          </div>
+
+          <div class="toolbar" style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div class="pill" style="background:#fff4dd;color:#9a6a00;">XP ${xp}</div>
+            <div class="pill" style="background:#e8f1fb;color:#0f4f86;">🔥 ${Number(streak.currentStreak) || 0} day streak</div>
+            <div class="pill" style="background:#e8f7ee;color:#1d7f49;">⭐ ${Number(streak.totalXp) || 0} XP</div>
+            <button type="button" class="btn btn-secondary" id="shuffleDailyLearningBtn">Shuffle</button>
+          </div>
+        </div>
+
+        <div
+          style="
+            display:grid;
+            grid-template-columns:minmax(0, 180px) minmax(0, 1fr);
+            gap:16px;
+            align-items:stretch;
+          "
+        >
+          <div
+            style="
+              border-radius:18px;
+              background:#0f4f86;
+              color:#ffffff;
+              padding:18px;
+              display:flex;
+              flex-direction:column;
+              justify-content:space-between;
+              min-height:180px;
+            "
+          >
+            <div>
+              <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:0.88;">Type</div>
+              <div style="font-size:24px;font-weight:700;margin-top:8px;">${escapeHtml(type)}</div>
+            </div>
+
+            <div style="margin-top:18px;">
+              <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:0.88;">Tag</div>
+              <div style="font-size:14px;font-weight:600;margin-top:8px;">${escapeHtml(tag)}</div>
+            </div>
+
+            <div style="margin-top:18px;font-size:13px;opacity:0.92;">
+              ${seen ? '👁 Seen' : '🆕 New'}
+              <br>
+              ${learned ? '✅ Learned' : '📘 Not learned yet'}
+            </div>
+          </div>
+
+          <div
+            style="
+              border:1px solid #dbe8f3;
+              border-radius:18px;
+              padding:18px;
+              background:#ffffff;
+              display:flex;
+              flex-direction:column;
+              justify-content:space-between;
+              min-height:180px;
+            "
+          >
+            <div>
+              <div style="font-size:18px;font-weight:700;color:#0f2740;line-height:1.5;">
+                ${escapeHtml(content)}
+              </div>
+
+              ${
+                !isQuote && subtext
+                  ? `<div class="muted" style="margin-top:12px;line-height:1.7;">${escapeHtml(subtext)}</div>`
+                  : ''
+              }
+
+              ${
+                isQuiz
+                  ? `
+                    <div style="margin-top:16px;display:grid;gap:10px;">
+                      ${[
+                        { key: 'A', text: card.optionA || '' },
+                        { key: 'B', text: card.optionB || '' },
+                        { key: 'C', text: card.optionC || '' },
+                        { key: 'D', text: card.optionD || '' }
+                      ].filter(function(option) {
+                        return String(option.text || '').trim();
+                      }).map(function(option) {
+                        return `
+                          <div
+                            style="
+                              border:1px solid #d8e5f0;
+                              border-radius:12px;
+                              padding:12px 14px;
+                              background:#f8fbff;
+                              color:#244258;
+                              font-size:14px;
+                            "
+                          >
+                            <strong>${escapeHtml(option.key)}.</strong> ${escapeHtml(option.text)}
+                          </div>
+                        `;
+                      }).join('')}
+                    </div>
+
+                    ${
+                      card.correctOption
+                        ? `<div class="muted" style="margin-top:14px;font-size:13px;">Correct option: <strong>${escapeHtml(card.correctOption)}</strong></div>`
+                        : ''
+                    }
+                  `
+                  : ''
+              }
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:18px;">
+              ${
+                isQuote && subtext
+                  ? `
+                    <div
+                      style="
+                        margin-top:18px;
+                        text-align:right;
+                        font-style:italic;
+                        color:#5f7285;
+                        font-size:14px;
+                        margin-left:auto;
+                      "
+                    >
+                      - ${escapeHtml(subtext)}
+                    </div>
+                  `
+                  : `<div></div>`
+              }
+
+              <button
+                type="button"
+                class="btn ${learned ? 'btn-secondary' : 'btn-primary'}"
+                id="markLearnedBtn"
+                data-card-id="${escapeHtml(cardId)}"
+                ${learned ? 'disabled' : ''}
+              >
+                ${learned ? 'Learned' : 'Mark as Learned'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+function renderDailyLearningMeta(meta) {
+  if (!meta) return '';
+
+  return `
+    <div class="daily-meta-bar" id="dailyMetaBar">
+      <div class="daily-meta-pill">
+        <span class="daily-meta-icon">🔥</span>
+        <span class="daily-meta-text"><strong id="dailyStreakValue">${Number(meta.streak || 0)}</strong> day streak</span>
+      </div>
+      <div class="daily-meta-pill">
+        <span class="daily-meta-icon">⭐</span>
+        <span class="daily-meta-text"><strong id="dailyTotalXpValue">${Number(meta.totalXp || 0)}</strong> XP</span>
+      </div>
+      <div class="daily-meta-pill ${meta.todayCompleted ? 'is-complete' : 'is-pending'}" id="dailyStatusPill">
+        <span class="daily-meta-icon">${meta.todayCompleted ? '✅' : '📘'}</span>
+        <span class="daily-meta-text" id="dailyStatusText">${meta.todayCompleted ? 'Completed today' : 'Pending today'}</span>
+      </div>
+    </div>
+  `;
+}
+function renderWeeklyStreakStrip(days) {
+  if (!Array.isArray(days) || !days.length) return '';
+
+  return `
+    <div class="weekly-streak-strip" id="weeklyStreakStrip">
+      ${days.map(function(day) {
+        return `
+          <div class="weekly-streak-day ${day.completed ? 'is-complete' : ''}" title="${day.dateKey}">
+            <span class="weekly-streak-label">${day.label}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+function renderRecommendedAction(action) {
+  return `
+    <div class="recommended-action-content">
+      <div class="recommended-action-card" id="recommendedActionCard">
+        <div class="recommended-action-title">Before we begin today’s training, take a few minutes to revise what you learned previously or try to learn something new that can help you today</div>
+      </div>
+    </div>
+  `;
+}
+
+function handleRecommendedActionClick(action) {
+  if (!action || !action.page) return;
+
+  if (action.page === 'training') {
+    switchPage('training');
+    return;
+  }
+
+  if (action.page === 'updates') {
+    switchPage('updates');
+    return;
+  }
+
+  switchPage('dashboard');
+}
+
+function handleMarkLearned(cardId) {
+  var btn = document.getElementById('markLearnedBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('is-loading');
+    btn.textContent = 'Saving...';
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (state.data && state.data.dailyLearning) {
+        state.data.dailyLearning.progress = state.data.dailyLearning.progress || { seenCardIds: [], learnedCardIds: [] };
+
+        if (result && result.cardId) {
+          if (state.data.dailyLearning.progress.learnedCardIds.indexOf(result.cardId) === -1) {
+            state.data.dailyLearning.progress.learnedCardIds.push(result.cardId);
+          }
+          if (state.data.dailyLearning.progress.seenCardIds.indexOf(result.cardId) === -1) {
+            state.data.dailyLearning.progress.seenCardIds.push(result.cardId);
+          }
+        }
+
+        state.data.dailyLearning.meta = state.data.dailyLearning.meta || {};
+        state.data.dailyLearning.meta.streak = Number(result.streak || 0);
+        state.data.dailyLearning.meta.totalXp = Number(result.totalXp || 0);
+        state.data.dailyLearning.meta.todayXp = Number(result.todayXp || 0);
+        state.data.dailyLearning.meta.todayCompleted = !!result.todayCompleted;
+        state.data.dailyLearning.weeklyStatus = Array.isArray(result.weeklyDailyStatus)
+          ? result.weeklyDailyStatus
+          : state.data.dailyLearning.weeklyStatus;
+      }
+
+      setDailyLearningCompletedState(result);
+      showXpBurst(Number(result.xpEarned || 0));
+
+      if (Number(result.streak || 0) > 0) {
+        animateStreakPulse();
+      }
+
+      showToast('Marked as learned. Great job!');
+    })
+    .withFailureHandler(function(error) {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('is-loading');
+        btn.textContent = 'Mark as Learned';
+      }
+      showToast((error && error.message) ? error.message : 'Unable to save your progress.');
+    })
+    .markDailyLearningComplete(cardId);
+}
+
+
+function setDailyLearningCompletedState(result) {
+  var btn = document.getElementById('markLearnedBtn');
+  var streakValue = document.getElementById('dailyStreakValue');
+  var totalXpValue = document.getElementById('dailyTotalXpValue');
+  var statusText = document.getElementById('dailyStatusText');
+  var statusPill = document.getElementById('dailyStatusPill');
+  var weeklyStrip = document.getElementById('weeklyStreakStrip');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.remove('is-loading');
+    btn.classList.add('is-complete');
+    btn.textContent = 'Completed Today';
+  }
+
+  if (streakValue) {
+    streakValue.textContent = Number(result.streak || 0);
+  }
+
+  if (totalXpValue) {
+    totalXpValue.textContent = Number(result.totalXp || 0);
+  }
+
+  if (statusText) {
+    statusText.textContent = 'Completed today';
+  }
+
+  if (statusPill) {
+    statusPill.classList.remove('is-pending');
+    statusPill.classList.add('is-complete');
+    var icon = statusPill.querySelector('.daily-meta-icon');
+    if (icon) {
+      icon.textContent = '✅';
+    }
+  }
+
+  if (weeklyStrip && Array.isArray(result.weeklyDailyStatus)) {
+    weeklyStrip.outerHTML = renderWeeklyStreakStrip(result.weeklyDailyStatus);
+  }
+}
+
+
+function showXpBurst(xp) {
+  if (!xp) return;
+
+  var host = document.querySelector('.daily-learning-card') || document.body;
+  var burst = document.createElement('div');
+  burst.className = 'xp-burst';
+  burst.textContent = '+' + xp + ' XP';
+
+  host.appendChild(burst);
+
+  setTimeout(function() {
+    if (burst && burst.parentNode) {
+      burst.parentNode.removeChild(burst);
+    }
+  }, 900);
+}
+
+
+function animateStreakPulse() {
+  var streakBar = document.getElementById('dailyMetaBar');
+  if (!streakBar) return;
+
+  streakBar.classList.remove('streak-pulse');
+  void streakBar.offsetWidth;
+  streakBar.classList.add('streak-pulse');
+}
+
+
+function bindDailyLearningActions() {
+  const shuffleBtn = document.getElementById('shuffleDailyLearningBtn');
+  const markLearnedBtn = document.getElementById('markLearnedBtn');
+  const block = ((state || {}).data || {}).dailyLearning || {};
+  const currentCard = block.todayCard || null;
+
+  if (currentCard && currentCard.cardId) {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        state.data.dailyLearning.progress = resp.progress || state.data.dailyLearning.progress;
+        state.data.dailyLearning.streak = resp.streak || state.data.dailyLearning.streak;
+      })
+      .withFailureHandler(function(err) {
+        console.error('Failed to mark daily learning seen', err);
+      })
+      .markDailyLearningSeen(currentCard.cardId);
+  }
+
+  if (shuffleBtn) {
+    shuffleBtn.addEventListener('click', function() {
+      const nextCard = getShuffledDailyLearningCard();
+      if (!nextCard) return;
+
+      state.data.dailyLearning.todayCard = nextCard;
+      if (state.data.dailyLearning.meta) {
+        state.data.dailyLearning.meta.todayCompleted = false;
+      }
+      renderApp();
+      switchPage('dashboard');
+    });
+  }
+
+  if (markLearnedBtn) {
+    markLearnedBtn.addEventListener('click', function() {
+      const cardId = this.getAttribute('data-card-id') || '';
+      if (!cardId) return;
+      handleMarkLearned(cardId);
+    });
+  }
+}
+
+  function getDriveFileIdFromUrl(url) {
+    if (!url) return '';
+
+    const value = String(url).trim();
+
+    const match =
+      value.match(/\/d\/([a-zA-Z0-9_-]{20,})/) ||
+      value.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) ||
+      value.match(/^([a-zA-Z0-9_-]{20,})$/);
+
+    return match ? (match[1] || match[0]) : '';
+  }
+
+  function isPdfLink(url) {
+    if (!url) return false;
+
+    const value = String(url).trim();
+
+    return /\.pdf(\?|#|$)/i.test(value) || /drive\.google\.com/i.test(value);
+  }
+
+  function getPortalPdfViewerUrl(url) {
+    if (!url) return '';
+
+    const value = String(url).trim();
+
+    if (/drive\.google\.com/i.test(value)) {
+      const fileId = getDriveFileIdFromUrl(value);
+      if (!fileId) return '';
+      return 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/preview';
+    }
+
+    if (/\.pdf(\?|#|$)/i.test(value)) {
+      return value;
+    }
+
+    return '';
+  }
+
+  function getEmbeddableResourceUrl(url) {
+    return getPortalPdfViewerUrl(url);
+  }
+
+  function renderPdfViewerShell(containerId, pdfUrl) {
+    if (!pdfUrl) {
+      return `
+        <div
+          id="${escapeHtml(containerId)}"
+          style="
+            width:100%;
+            min-height:220px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            text-align:center;
+            color:#5f7285;
+            font-size:14px;
+            background:#ffffff;
+            border:1px solid #d8e5f0;
+            border-radius:14px;
+            padding:20px;
+            box-sizing:border-box;
+          "
+        >
+          PDF URL not available.
+        </div>
+      `;
+    }
+
+    return `
+      <div
+        id="${escapeHtml(containerId)}"
+        style="
+          width:100%;
+          height:100%;
+          min-height:420px;
+          overflow:hidden;
+          background:#eef4f9;
+          border-radius:14px;
+          box-sizing:border-box;
+          border:1px solid #d8e5f0;
+        "
+      >
+        <iframe
+          src="${escapeHtml(pdfUrl)}"
+          style="width:100%;height:100%;min-height:420px;border:none;background:#fff;"
+          allow="autoplay"
+        ></iframe>
+      </div>
+    `;
+  }
+
+  function loadPdfIntoContainer(pdfUrl, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container || !pdfUrl) return;
+
+    container.innerHTML = `
+      <iframe
+        src="${escapeHtml(pdfUrl)}"
+        style="width:100%;height:100%;min-height:420px;border:none;background:#fff;"
+        allow="autoplay"
+      ></iframe>
+    `;
+  }
+
+  function getSafeVideoEmbedUrl(url) {
+    if (!url) return '';
+
+    const value = String(url).trim();
+    if (!value) return '';
+
+    if (/youtube\.com\/embed\//i.test(value) || /youtube-nocookie\.com\/embed\//i.test(value)) {
+      return value.indexOf('?') === -1
+        ? value + '?rel=0&modestbranding=1&playsinline=1'
+        : value + '&rel=0&modestbranding=1&playsinline=1';
+    }
+
+    let match = value.match(/[?&]v=([a-zA-Z0-9_-]{6,})/);
+    if (match && match[1]) {
+      return 'https://www.youtube.com/embed/' + match[1] + '?rel=0&modestbranding=1&playsinline=1';
+    }
+
+    match = value.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
+    if (match && match[1]) {
+      return 'https://www.youtube.com/embed/' + match[1] + '?rel=0&modestbranding=1&playsinline=1';
+    }
+
+    match = value.match(/\/shorts\/([a-zA-Z0-9_-]{6,})/);
+    if (match && match[1]) {
+      return 'https://www.youtube.com/embed/' + match[1] + '?rel=0&modestbranding=1&playsinline=1';
+    }
+
+    match = value.match(/^([a-zA-Z0-9_-]{6,})$/);
+    if (match && match[1]) {
+      return 'https://www.youtube.com/embed/' + match[1] + '?rel=0&modestbranding=1&playsinline=1';
+    }
+
+    return '';
+  }
+
+  function initApp() {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        state.data = data || {};
+
+        const auth = state.data.auth || {};
+        state.authRequired = !!auth.requireOtp;
+        state.authMode = auth.mode || '';
+        state.authMessage = auth.message || '';
+        state.inactivityMinutes = Number(auth.reverifyMinutes || 60);
+
+        renderApp();
+
+        if (!state.authRequired) {
+          startInactivityWatch();
+          bindGlobalActivityWatch();
+        }
+      })
+      .withFailureHandler(function(err) {
+        renderError('Failed to load portal data', err);
+      })
+      .getPortalBootstrap();
+  }
+
+  function renderError(title, err) {
+    const app = document.getElementById('app');
+    app.innerHTML = `
+      <div class="loading-screen">
+        <div class="loading-card">
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(getErrorMessage(err))}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  function getErrorMessage(err) {
+    if (!err) return 'Unknown error';
+    if (typeof err === 'string') return err;
+    return err.message || JSON.stringify(err);
+  }
+
+  function renderApp() {
+  const app = document.getElementById('app');
+  const d = state.data;
+
+  if (!d) {
+    renderError('Portal data missing', 'No data available.');
+    return;
+  }
+
+  if (d.restricted) {
+    app.innerHTML = `
+      <div class="restricted">
+        <div class="restricted-card">
+          <div class="pill">Restricted Access</div>
+          <h2>${escapeHtml(d.restricted.title)}</h2>
+          <p class="muted">${escapeHtml(d.restricted.message)}</p>
+          <p class="muted">${escapeHtml(d.restricted.detail)}</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  app.innerHTML = `
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <h1>${escapeHtml(d.appName)}</h1>
+          <p>Learning, assessments, updates, and admin controls</p>
+        </div>
+
+        <div class="user-card">
+          <div class="user-name">${escapeHtml(d.user.name)}</div>
+          <div class="user-meta">${escapeHtml(d.user.email)}</div>
+          <div class="user-meta">Domain: ${escapeHtml(d.user.domain || 'N/A')}</div>
+          <div class="role-badge">${escapeHtml(d.access.role)}</div>
+        </div>
+
+        <div class="menu">
+          <button class="menu-btn ${isActive('dashboard')}" data-page="dashboard">Dashboard</button>
+          <button class="menu-btn ${isActive('company')}" data-page="company">Know Your Company</button>
+          <button class="menu-btn ${isActive('training')}" data-page="training">Recruiter Learning Hub</button>
+          <button class="menu-btn ${isActive('quiz')}" data-page="quiz">Assessments</button>
+          <button class="menu-btn ${isActive('updates')}" data-page="updates">Updates & Changes</button>
+          ${d.access.isAdmin ? `<button class="menu-btn ${isActive('admin')}" data-page="admin">Admin</button>` : ''}
+        </div>
+
+        <div class="sidebar-footer">
+          <strong>Support:</strong><br>${escapeHtml(d.supportEmail)}<br><br>
+          <strong>Website:</strong><br>
+          <a href="${escapeHtml(d.companyWebsite)}" target="_blank">${escapeHtml(d.companyWebsite)}</a>
+        </div>
+      </aside>
+
+      <main class="main">
+        ${renderPages()}
+      </main>
+    </div>
+
+    ${renderChatbotWidget()}
+    ${renderAuthModal()}
+  `;
+
+  bindMenu();
+  bindDailyLearningActions();
+  bindTrainingActions();
+  bindTrainingVisualActions();
+  bindResourceModalActions();
+  bindQuizActions();
+  bindAdminActions();
+  bindChatbotActions();
+  bindAuthActions();
+}
+  function renderPages() {
+    return `
+      <section class="page ${isPage('dashboard')}" id="page-dashboard">${renderDashboardPage()}</section>
+      <section class="page ${isPage('company')}" id="page-company">${renderCompanyPage()}</section>
+      <section class="page ${isPage('training')}" id="page-training">${renderTrainingPage()}</section>
+      <section class="page ${isPage('quiz')}" id="page-quiz">${renderQuizPage()}</section>
+      <section class="page ${isPage('updates')}" id="page-updates">${renderUpdatesPage()}</section>
+      ${state.data.access.isAdmin ? `<section class="page ${isPage('admin')}" id="page-admin">${renderAdminPage()}</section>` : ''}
+    `;
+  }
+
+  function renderAuthModal() {
+    if (!state.authRequired) return '';
+
+    return `
+      <div class="auth-overlay">
+        <div class="auth-modal">
+          <div class="pill">Secure Verification</div>
+          <h3>${escapeHtml(state.authMode === 'reauth' ? 'Session expired' : 'Verify your login')}</h3>
+          <p class="muted">
+            ${escapeHtml(
+              state.authMessage ||
+              'Enter the OTP sent to your company email to continue.'
+            )}
+          </p>
+
+          <input
+            id="otpInput"
+            class="field"
+            type="text"
+            maxlength="6"
+            inputmode="numeric"
+            placeholder="Enter 6-digit OTP"
+            value="${escapeHtml(state.otpValue || '')}"
+            style="margin-top:14px;"
+          >
+
+          <div class="lesson-actions" style="margin-top:14px;">
+            <button class="btn btn-secondary" id="sendOtpBtn" ${state.authBusy ? 'disabled' : ''}>
+              ${state.authBusy ? 'Please wait...' : 'Send OTP'}
+            </button>
+            <button class="btn btn-primary" id="verifyOtpBtn" ${state.authBusy ? 'disabled' : ''}>
+              ${state.authBusy ? 'Verifying...' : 'Verify OTP'}
+            </button>
+          </div>
+
+          <p class="muted" style="margin-top:12px;font-size:12px;">
+            Access is allowed only for approved First Connect Health users.
+          </p>
+        </div>
+      </div>
+    `;
+  }
+
+function renderDashboardPage() {
+  const d = state.data;
+  const s = d.dashboardStats || {};
+  const p = d.progressSummary || {};
+  const q = d.quizSummary || {};
+  const updates = d.updates  || [];
+  const modules = d.modules || [];
+  const certificateList = Array.isArray(q.certificates) ? q.certificates : [];
+  const latestCertificate = certificateList.length ? certificateList[certificateList.length - 1] : null;
+  const dashboardLogoFileId = '1gnUyuGIaoeprrTqjnHdrmuoUju1hyEk0';
+  const dashboardLogoUrl = getDriveImageUrlFromFileId(dashboardLogoFileId, 1600);
+
+  const dailyMetaHtml = renderDailyLearningMeta((d.dailyLearning || {}).meta);
+  const weeklyStripHtml = renderWeeklyStreakStrip((d.dailyLearning || {}).weeklyStatus);
+  const recommendedActionHtml = renderRecommendedAction(d.recommendedAction);
+
+  return `
+  <section class="hero">
+    <div class="hero-grid">
+      <div>
+        <div class="pill" style="background:rgba(255,255,255,0.14);color:#fff;">Recruiter Learning Hub</div>
+        <h2>Welcome, ${escapeHtml(d.user.name)}</h2>
+        <p>Build your recruiter skills step by step, track your progress, complete module assessments, and stay aligned with updates.</p>
+      </div>
+
+      <div
+        style="
+          display:flex;
+          align-items:center;
+          justify-content:flex-end;
+          min-height:180px;
+          padding:0 6px 0 24px;
+          box-sizing:border-box;
+        "
+      >
+        <img
+          src="${escapeHtml(dashboardLogoUrl)}"
+          alt="First Connect Health Logo"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          style="
+            max-width:360px;
+            max-height:170px;
+            width:auto;
+            height:auto;
+            object-fit:contain;
+            display:block;
+            margin-left:auto;
+            background:transparent;
+          "
+          onerror="this.style.display='none';"
+        >
+      </div>
+    </div>
+  </section>
+
+  <div class="top-strip">
+    <div>
+      <h2 class="page-title">Dashboard</h2>
+      <p class="page-subtitle">Track your training, continue learning, complete assessments, and stay updated with the latest process changes.</p>
+    </div>
+  </div>
+
+  ${recommendedActionHtml}
+  ${dailyMetaHtml}
+  ${weeklyStripHtml}
+
+    <section class="grid grid-4">
+      <div class="card stat-card">
+        <div class="label">Completed Lessons</div>
+        <div class="value">${Number(s.completedLessons) || 0}</div>
+      </div>
+
+      <div class="card stat-card">
+        <div class="label">Assessments Taken</div>
+        <div class="value">${Number(s.quizzesTaken) || 0}</div>
+      </div>
+
+      <div class="card stat-card">
+        <div class="label">Average Score</div>
+        <div class="value">${Number(s.avgQuizScore) || 0}%</div>
+      </div>
+
+      <div class="card stat-card">
+        <div class="label">Certificates Earned</div>
+        <div class="value">${Number(s.certificatesEarned) || 0}</div>
+
+        <div class="lesson-actions" style="margin-top:12px;">
+          ${
+            latestCertificate && latestCertificate.url
+              ? `
+                <a class="btn btn-secondary" target="_blank" href="${escapeHtml(latestCertificate.url)}">
+                  View Latest Certificate
+                </a>
+              `
+              : `
+                <button class="btn btn-secondary" type="button" disabled>
+                  No Certificate Yet
+                </button>
+              `
+          }
+        </div>
+
+        ${
+          latestCertificate
+            ? `
+              <div class="muted" style="margin-top:10px;font-size:12px;">
+                Latest: ${escapeHtml(latestCertificate.moduleId || '')}
+                ${latestCertificate.issuedAt ? ` • Issued: ${escapeHtml(latestCertificate.issuedAt)}` : ''}
+              </div>
+            `
+            : ''
+        }
+      </div>
+    </section>
+
+    ${renderDailyLearningCard()}
+
+    <section class="grid grid-2">
+      <div class="card">
+        <div class="pill">Your Next Step</div>
+        <h3 style="margin-top:10px;">Stay on track</h3>
+        <div class="muted" style="margin-top:10px;"><strong>Current Module:</strong> ${escapeHtml(p.currentWeek || 'Not Started')}</div>
+        <div class="muted" style="margin-top:8px;"><strong>Next Task:</strong> ${escapeHtml(p.nextTask || 'Open your first module')}</div>
+        <div class="muted" style="margin-top:8px;"><strong>Completion:</strong> ${Number(p.progressPercent) || 0}%</div>
+        <div class="lesson-actions" style="margin-top:14px;">
+          <button class="btn btn-primary" onclick="switchPage('training')">Go to Learning Hub</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="pill">Know Your Company</div>
+        <h3 style="margin-top:10px;">Build context before execution</h3>
+        <p class="muted">Understand First Connect Health, how healthcare staffing works, and how your role fits into the bigger picture.</p>
+        <div class="lesson-actions" style="margin-top:14px;">
+          <button class="btn btn-secondary" onclick="switchPage('company')">Explore Section</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="top-strip" style="margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0;">Learning Tracks</h3>
+          <p class="page-subtitle" style="margin-top:6px;">Continue through your modules in sequence.</p>
+        </div>
+      </div>
+
+      ${
+        modules.length
+          ? `<div class="grid grid-2">
+              ${modules.map(function(module) {
+                const completed = (module.lessons || []).filter(function(lesson) {
+                  const key = buildProgressKey(module.id, lesson.name);
+                  return String((d.progressMap || {})[key] || '').toLowerCase() === 'completed';
+                }).length;
+                const total = (module.lessons || []).length;
+                const percent = total ? Math.round((completed / total) * 100) : 0;
+
+                return `
+                  <div class="card module-card">
+                    <div class="pill">${escapeHtml(module.subtitle || '')}</div>
+                    <h4>${escapeHtml(module.title)}</h4>
+                    <div class="module-sub">${escapeHtml(module.id)}</div>
+
+                    <div class="muted" style="margin:12px 0 10px;">
+                      ${completed} / ${total} lessons completed
+                    </div>
+
+                    <div class="progress" style="margin-bottom:14px;">
+                      <div class="progress-fill" style="width:${percent}%"></div>
+                    </div>
+
+                    <div class="lesson-actions">
+                      <button class="btn btn-primary" onclick="switchPage('training')">View Module</button>
+                      <button class="btn btn-secondary" onclick="openModuleQuiz('${escapeHtml(module.id)}')">Assessment</button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>`
+          : `<div class="card empty-state">No modules available yet.</div>`
+      }
+    </section>
+
+    <section class="grid grid-2">
+      <div class="card">
+        <div class="pill">Assessments</div>
+        <h3 style="margin-top:10px;">Validate your learning</h3>
+        <p class="muted">Take module-based assessments, track your scores, and earn certificates after passing.</p>
+        <div class="lesson-actions" style="margin-top:14px;">
+          <button class="btn btn-primary" onclick="switchPage('quiz')">Start Assessments</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="pill">Certificates</div>
+        <h3 style="margin-top:10px;">Track earned certificates</h3>
+        <p class="muted">View your most recent certificate after successfully passing module assessments.</p>
+        <div class="lesson-actions" style="margin-top:14px;">
+          ${
+            latestCertificate && latestCertificate.url
+              ? `<a class="btn btn-secondary" target="_blank" href="${escapeHtml(latestCertificate.url)}">View Latest Certificate</a>`
+              : `<button class="btn btn-secondary" type="button" disabled>No Certificate Yet</button>`
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="top-strip" style="margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0;">Latest Updates</h3>
+          <p class="page-subtitle" style="margin-top:6px;">Important changes in tools, process, and training.</p>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-secondary" onclick="switchPage('updates')">View All Updates</button>
+        </div>
+      </div>
+
+      ${
+        updates.length
+          ? `<div class="grid grid-2">
+              ${updates.slice(0, 4).map(function(item) {
+                return `
+                  <div class="announcement ${escapeHtml(item.type || 'info')}">
+                    <div class="dot"></div>
+                    <div>
+                      <h4>${escapeHtml(item.title)}</h4>
+                      <p>${escapeHtml(item.message)}</p>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>`
+          : `<div class="card empty-state">No updates available.</div>`
+      }
+    </section>
+  `;
+}
+  function renderTrainingPage() {
+  const d = state.data;
+  const progressMap = d.progressMap || {};
+
+  return `
+    <div class="top-strip">
+      <div>
+        <h2 class="page-title">Recruiter Learning Hub</h2>
+        <p class="page-subtitle">Access all training modules, build your skills step by step, and complete each lesson in sequence.</p>
+      </div>
+    </div>
+
+    <section class="section">
+      <div style="display:grid; gap:18px;">
+        ${(d.modules || []).map(function(module) {
+          const visualFileId = module.visualFileId || '';
+          const visual = {
+            title: (module.title || 'Training') + ' Visual',
+            imageUrl: visualFileId ? getDriveImageUrlFromFileId(visualFileId, 1600) : ''
+          };
+
+          const completed = (module.lessons || []).filter(function(lesson) {
+            const key = buildProgressKey(module.id, lesson.name);
+            return String((progressMap || {})[key] || '').toLowerCase() === 'completed';
+          }).length;
+
+          const total = (module.lessons || []).length;
+          const percent = total ? Math.round((completed / total) * 100) : 0;
+
+          return `
+            <div
+              class="training-module-row"
+              style="
+                display:grid;
+                grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);
+                gap:20px;
+                align-items:stretch;
+              "
+            >
+              <div class="card module-card" style="height:100%;">
+                <div class="pill">${escapeHtml(module.stage || module.subtitle || '')}</div>
+                <h4>${escapeHtml(module.title)}</h4>
+                <div class="module-sub">${escapeHtml(module.id)}</div>
+
+                <div class="muted" style="margin:12px 0 10px;">
+                  ${completed} / ${total} lessons completed
+                </div>
+
+                <div class="progress" style="margin-bottom:14px;">
+                  <div class="progress-fill" style="width:${percent}%"></div>
+                </div>
+
+                <div class="lesson-list">
+                  ${(module.lessons || []).map(function(lesson, lessonIndex) {
+                    const key = buildProgressKey(module.id, lesson.name);
+                    const lessonStatus = String(progressMap[key] || 'Not Started');
+                    const isInProgress = lessonStatus === 'In Progress';
+                    const isCompleted = lessonStatus === 'Completed';
+
+                    const safeVideoUrl = getSafeVideoEmbedUrl(lesson.videoEmbedUrl || '');
+                    const hasVideo = !!safeVideoUrl;
+
+                    const lessonResourceLink = lesson.link || lesson.lessonLink || lesson.resourceLink || '';
+                    const resourcePdfUrl = getPortalPdfViewerUrl(lessonResourceLink);
+                    const hasLink = !!lessonResourceLink;
+                    const canEmbedResource = !!resourcePdfUrl;
+
+                    const videoTargetId = 'video_' + escapeHtml(module.id) + '_' + lessonIndex;
+                    const resourceTargetId = 'resource_' + escapeHtml(module.id) + '_' + lessonIndex;
+                    const inlinePdfContainerId = 'inline_pdf_' + escapeHtml(module.id) + '_' + lessonIndex;
+
+                    return `
+                      <div class="lesson-row">
+                        <div class="lesson-main">
+                          <div class="lesson-name">${escapeHtml(lesson.name)}</div>
+                          <div class="lesson-meta">
+                            ${escapeHtml(lesson.type || 'Lesson')}
+                          </div>
+                        </div>
+
+                        <div class="lesson-actions" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                          ${
+                            hasVideo
+                              ? `<button
+                                   type="button"
+                                   class="mini-btn video-progress-btn"
+                                   data-module-id="${escapeHtml(module.id)}"
+                                   data-lesson-name="${escapeHtml(lesson.name)}"
+                                   data-target-id="${videoTargetId}"
+                                 >Watch Video</button>`
+                              : `<span class="mini-btn" style="pointer-events:none;opacity:0.65;">Watch Video</span>`
+                          }
+
+                          ${
+                            hasLink
+                              ? `<button
+                                   type="button"
+                                   class="mini-btn resource-progress-btn"
+                                   data-module-id="${escapeHtml(module.id)}"
+                                   data-lesson-name="${escapeHtml(lesson.name)}"
+                                   data-target-id="${resourceTargetId}"
+                                   data-pdf-url="${escapeHtml(resourcePdfUrl)}"
+                                   data-inline-pdf-container-id="${escapeHtml(inlinePdfContainerId)}"
+                                 >Open Resource</button>`
+                              : `<span class="mini-btn" style="pointer-events:none;opacity:0.65;">Open Resource</span>`
+                          }
+
+                          <span
+                            class="mini-btn ${isInProgress ? 'btn-primary' : ''}"
+                            style="pointer-events:none;cursor:default;${isInProgress ? '' : 'opacity:0.75;'}"
+                          >
+                            ${isInProgress ? 'In Progress' : 'Not Started'}
+                          </span>
+
+                          <span
+                            class="mini-btn ${isCompleted ? 'btn-primary' : ''}"
+                            style="pointer-events:none;cursor:default;${isCompleted ? '' : 'opacity:0.75;'}"
+                          >
+                            ${isCompleted ? 'Completed' : 'Not Completed'}
+                          </span>
+                        </div>
+
+                        ${
+                          (hasVideo || hasLink)
+                            ? `<div
+                                 class="lesson-preview-stack"
+                                 style="
+                                   display:grid;
+                                   grid-template-columns:1fr;
+                                   gap:12px;
+                                   margin-top:12px;
+                                 "
+                               >
+                                 ${
+                                   lesson.videoEmbedUrl
+                                     ? `
+                                      <div
+                                        id="${videoTargetId}"
+                                        class="lesson-preview-box video-box"
+                                        style="display:none;"
+                                      >
+                                        ${
+                                          safeVideoUrl
+                                            ? `
+                                              <iframe
+                                                src="${escapeHtml(safeVideoUrl)}"
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                                allowfullscreen
+                                                referrerpolicy="strict-origin-when-cross-origin"
+                                                loading="lazy"
+                                                style="width:100%;height:360px;border:none;border-radius:14px;background:#fff;"
+                                              ></iframe>
+                                            `
+                                            : `
+                                              <div
+                                                style="
+                                                  min-height:220px;
+                                                  display:flex;
+                                                  align-items:center;
+                                                  justify-content:center;
+                                                  text-align:center;
+                                                  color:#5f7285;
+                                                  font-size:14px;
+                                                  background:#ffffff;
+                                                  border:1px solid #d8e5f0;
+                                                  border-radius:14px;
+                                                  padding:20px;
+                                                  box-sizing:border-box;
+                                                "
+                                              >
+                                                This video link is not in a valid embeddable YouTube format.
+                                              </div>
+                                            `
+                                        }
+                                      </div>
+                                    `
+                                     : ''
+                                 }
+
+                                 ${
+                                   hasLink
+                                     ? `
+                                       <div
+                                         id="${resourceTargetId}"
+                                         class="lesson-preview-box video-box"
+                                         style="display:none;background:#f8fbff;border:1px solid #dbe8f3;padding:12px;"
+                                       >
+                                         ${
+                                           canEmbedResource
+                                             ? `
+                                               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap;">
+                                                 <div class="muted" style="font-size:13px;">Resource Preview</div>
+                                                 <button
+                                                   type="button"
+                                                   class="mini-btn resource-expand-btn"
+                                                   data-resource-url="${escapeHtml(resourcePdfUrl)}"
+                                                   data-resource-title="${escapeHtml(lesson.name + ' Resource')}"
+                                                 >
+                                                   Expand PDF
+                                                 </button>
+                                               </div>
+
+                                               ${renderPdfViewerShell(inlinePdfContainerId, resourcePdfUrl)}
+                                             `
+                                             : `
+                                               <div style="padding:18px;">
+                                                 <div class="muted" style="margin-bottom:10px;">
+                                                   This resource link cannot be opened as a locked in-portal PDF. Please use a Google Drive file link or direct PDF link.
+                                                 </div>
+                                               </div>
+                                             `
+                                         }
+                                       </div>
+                                     `
+                                     : ''
+                                 }
+                               </div>`
+                            : ''
+                        }
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+
+              <div
+                class="card training-visual-card"
+                style="
+                  padding:16px;
+                  display:flex;
+                  flex-direction:column;
+                  height:100%;
+                "
+              >
+                <div style="margin-bottom:12px;">
+                  <div class="pill">Training Visual</div>
+                  <h4 style="margin-top:10px;margin-bottom:0;">${escapeHtml(visual.title)}</h4>
+                </div>
+
+                ${
+                  visual.imageUrl
+                    ? `
+                      <div
+                        class="training-visual-trigger"
+                        data-image-url="${escapeHtml(visual.imageUrl)}"
+                        data-image-title="${escapeHtml(visual.title)}"
+                        style="
+                          flex:1;
+                          display:flex;
+                          cursor:pointer;
+                        "
+                      >
+                        <img
+                          src="${escapeHtml(visual.imageUrl)}"
+                          alt="${escapeHtml(visual.title)}"
+                          loading="lazy"
+                          referrerpolicy="no-referrer"
+                          style="
+                            width:100%;
+                            height:100%;
+                            min-height:420px;
+                            object-fit:contain;
+                            border-radius:16px;
+                            border:1px solid #d8e5f0;
+                            display:block;
+                            background:#f4f8fb;
+                            padding:10px;
+                            box-sizing:border-box;
+                          "
+                          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                        >
+                        <div
+                          style="
+                            display:none;
+                            width:100%;
+                            min-height:420px;
+                            border-radius:16px;
+                            border:1px dashed #c9d9e8;
+                            background:#f8fbfe;
+                            align-items:center;
+                            justify-content:center;
+                            text-align:center;
+                            padding:20px;
+                            color:#5f7285;
+                            font-size:14px;
+                            box-sizing:border-box;
+                          "
+                        >
+                          Image could not be loaded.<br>
+                          Check Drive sharing permission and file ID.
+                        </div>
+                      </div>
+                    `
+                    : `
+                      <div
+                        style="
+                          flex:1;
+                          width:100%;
+                          min-height:420px;
+                          border-radius:16px;
+                          border:1px dashed #c9d9e8;
+                          background:#f8fbfe;
+                          display:flex;
+                          align-items:center;
+                          justify-content:center;
+                          text-align:center;
+                          padding:20px;
+                          color:#5f7285;
+                          font-size:14px;
+                          box-sizing:border-box;
+                        "
+                      >
+                        No visual available for this module.
+                      </div>
+                    `
+                }
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </section>
+
+    ${renderTrainingImageModal()}
+    ${renderResourceModal()}
+  `;
+}
+
+  function renderTrainingImageModal() {
+    return `
+      <div
+        id="trainingImageModal"
+        style="
+          display:none;
+          position:fixed;
+          inset:0;
+          background:rgba(8,16,28,0.94);
+          z-index:10000;
+          padding:10px;
+          box-sizing:border-box;
+          align-items:center;
+          justify-content:center;
+        "
+      >
+        <div
+          style="
+            position:relative;
+            width:99vw;
+            height:98vh;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+          "
+        >
+          <button
+            type="button"
+            id="trainingImageModalClose"
+            aria-label="Close image preview"
+            style="
+              position:absolute;
+              top:10px;
+              right:10px;
+              width:48px;
+              height:48px;
+              border:none;
+              border-radius:999px;
+              background:#ffffff;
+              color:#0f4f86;
+              font-size:26px;
+              font-weight:700;
+              cursor:pointer;
+              box-shadow:0 10px 24px rgba(0,0,0,0.24);
+              z-index:2;
+            "
+          >
+            ×
+          </button>
+
+          <img
+            id="trainingImageModalImg"
+            src=""
+            alt=""
+            style="
+              max-width:98vw;
+              max-height:96vh;
+              width:auto;
+              height:auto;
+              object-fit:contain;
+              border-radius:18px;
+              box-shadow:0 24px 60px rgba(0,0,0,0.35);
+              background:#fff;
+            "
+          >
+        </div>
+      </div>
+    `;
+  }
+
+  function renderQuizPage() {
+    const d = state.data;
+    const modules = d.modules || [];
+    const quizSummary = d.quizSummary || {};
+
+    return `
+      <div class="top-strip">
+        <div>
+          <h2 class="page-title">Assessments</h2>
+          <p class="page-subtitle">Take module assessments. Passing score: 70%. Certificates are generated automatically after passing.</p>
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="pill">Assessment Selection</div>
+          <label class="muted">Choose a module</label>
+          <select id="quizModuleSelect" class="select" style="margin-top:10px;">
+            <option value="">Select module</option>
+            ${modules.map(function(module) {
+              return `<option value="${escapeHtml(module.id)}" ${state.selectedModuleQuiz === module.id ? 'selected' : ''}>${escapeHtml(module.id + ' - ' + module.title)}</option>`;
+            }).join('')}
+          </select>
+        </div>
+
+        <div class="card quiz-summary-box">
+          <div class="pill">Your Assessment Summary</div>
+          <div class="muted">Assessments Taken</div>
+          <div class="score-big">${Number(quizSummary.quizzesTaken) || 0}</div>
+          <div class="muted">Average Score: ${Number(quizSummary.avgQuizScore) || 0}%</div>
+          <div class="muted">Certificates Earned: ${Number(quizSummary.certificatesEarned) || 0}</div>
+        </div>
+      </div>
+
+      <section class="section" style="padding-bottom:110px;">
+        <h3>Assessment Questions</h3>
+        <div id="quizContainer">
+          ${renderQuizQuestions()}
+        </div>
+
+        <div class="lesson-actions" style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-start;padding-right:90px;">
+          <button class="btn btn-primary" id="submitQuizBtn">Submit Assessment</button>
+          <button class="btn btn-secondary" onclick="switchPage('training')">Go to Recruiter Learning Hub</button>
+          <button class="btn btn-secondary" onclick="switchPage('dashboard')">Go to Dashboard</button>
+        </div>
+      </section>
+
+      ${
+        state.quizResult
+          ? `<section class="section" style="padding-bottom:110px;">
+              <h3>Latest Assessment Result</h3>
+              <div class="card">
+                <div class="score-big">${Number(state.quizResult.scorePercent) || 0}%</div>
+                <div class="muted">Correct Answers: ${Number(state.quizResult.correctAnswers) || 0} / ${Number(state.quizResult.totalQuestions) || 0}</div>
+                <div class="muted">Result: ${state.quizResult.passed ? 'Passed' : 'Failed'}</div>
+                ${
+                  state.quizResult.certificate && state.quizResult.certificate.url
+                    ? `<div class="lesson-actions" style="margin-top:14px;">
+                        <a class="btn btn-primary" target="_blank" href="${escapeHtml(state.quizResult.certificate.url)}">Open Certificate</a>
+                      </div>`
+                    : ''
+                }
+              </div>
+            </section>`
+          : ''
+      }
+    `;
+  }
+
+  function renderQuizQuestions() {
+    if (!state.selectedModuleQuiz) {
+      return `<div class="empty-state">Select a module to see questions here.</div>`;
+    }
+
+    if (!state.quizQuestions.length) {
+      return `<div class="empty-state">No questions available for the selected module.</div>`;
+    }
+
+    return `
+      <div class="grid">
+        ${state.quizQuestions.map(function(q, idx) {
+          return `
+            <div class="quiz-question">
+              <h4>Q${idx + 1}. ${escapeHtml(q.question)}</h4>
+              <div class="quiz-options">
+                ${[
+                  { key: 'A', text: (q.options && q.options[0]) || '' },
+                  { key: 'B', text: (q.options && q.options[1]) || '' },
+                  { key: 'C', text: (q.options && q.options[2]) || '' },
+                  { key: 'D', text: (q.options && q.options[3]) || '' }
+                ].map(function(option) {
+                  return `
+                    <label class="quiz-option">
+                      <input type="radio" name="quiz_${escapeHtml(q.questionId)}" value="${option.key}" ${state.quizAnswers[q.questionId] === option.key ? 'checked' : ''}>
+                      <span><strong>${option.key}.</strong> ${escapeHtml(option.text)}</span>
+                    </label>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function renderUpdatesPage() {
+    const updates = state.data.updates || [];
+
+    return `
+      <div class="top-strip">
+        <div>
+          <h2 class="page-title">Updates & Changes</h2>
+          <p class="page-subtitle">Stay updated with the latest changes in processes, tools, and training content.</p>
+        </div>
+      </div>
+
+      <section class="section">
+        ${
+          updates.length
+            ? `<div class="grid grid-2">
+                ${updates.map(function(item) {
+                  return `
+                    <div class="announcement ${escapeHtml(item.type || 'info')}">
+                      <div class="dot"></div>
+                      <div>
+                        <h4>${escapeHtml(item.title)}</h4>
+                        <p>${escapeHtml(item.message)}</p>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>`
+            : `<div class="card empty-state">No updates available.</div>`
+        }
+      </section>
+    `;
+  }
+
+  function renderCompanyPage() {
+    const company = state.data.company || {};
+    const standards = Array.isArray(company.values) ? company.values : [];
+    const contacts = Array.isArray(company.contacts) ? company.contacts : [];
+    const progress = state.data.progressSummary || {};
+    const quizSummary = state.data.quizSummary || {};
+    const progressPercent = Number(progress.progressPercent) || 0;
+    const quizzesTaken = Number(quizSummary.quizzesTaken) || 0;
+    const certificatesEarned = Number(quizSummary.certificatesEarned) || 0;
+
+    const companyStepStatus = 'Completed';
+    const learningStepStatus =
+      progressPercent >= 100 ? 'Completed' : progressPercent > 0 ? 'In Progress' : 'Not Started';
+    const assessmentStepStatus =
+      quizzesTaken > 0 ? 'In Progress' : progressPercent >= 100 ? 'Ready' : 'Locked';
+    const certificateStepStatus =
+      certificatesEarned > 0 ? 'Completed' : quizzesTaken > 0 ? 'In Progress' : 'Locked';
+
+    return `
+      <div class="top-strip">
+        <div>
+          <h2 class="page-title">${escapeHtml(company.title || 'Know Your Company')}</h2>
+          <p class="page-subtitle">Understand First Connect Health, how healthcare staffing works, and how your role fits into the bigger picture.</p>
+        </div>
+      </div>
+
+      <section class="hero">
+        <div class="hero-grid">
+          <div>
+            <div class="pill" style="background:rgba(255,255,255,0.14);color:#fff;">Step 1 of 4 | New Joiner Training</div>
+            <h2 style="margin-top:14px;">Welcome to First Connect Health</h2>
+            <p style="max-width:720px; line-height:1.7;">
+              Start your onboarding journey by understanding the fundamentals of First Connect Health, the healthcare staffing landscape, and the impact of your role in the recruitment process.
+
+              You will explore how the business operates, how recruiters drive outcomes, and what standards are expected in day-to-day execution.
+
+              This step ensures you build the right mindset and context before moving into hands-on training and assessments.
+            </p>
+          </div>
+
+          <div class="hero-box">
+            <div class="hero-label">Your Progress Journey</div>
+            <div class="hero-value">Step 1 of 4</div>
+
+            <div class="hero-label" style="margin-top:14px;">Current Step</div>
+            <div class="hero-value">Know Your Company</div>
+
+            <div class="hero-label" style="margin-top:14px;">Next Step</div>
+            <div class="hero-value">Recruiter Learning Hub</div>
+
+            <div class="hero-label" style="margin-top:14px;">Goal</div>
+            <div class="hero-value">Complete training & assessments</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="card">
+          <div class="top-strip" style="margin-bottom:14px;">
+            <div>
+              <div class="pill">Training Journey</div>
+              <h3 style="margin:8px 0 0;">Your Progress Tracker</h3>
+              <p class="muted" style="margin-top:8px;">
+                Completion: ${progressPercent}%
+                ${progress.currentWeek ? `• Current Module: ${escapeHtml(progress.currentWeek)}` : ''}
+                ${progress.nextTask ? `• Next Task: ${escapeHtml(progress.nextTask)}` : ''}
+              </p>
+            </div>
+          </div>
+
+          <div class="progress" style="margin-bottom:18px;">
+            <div class="progress-fill" style="width:${progressPercent}%"></div>
+          </div>
+
+          <div class="grid grid-4">
+            ${[
+              {
+                step: 'Step 1',
+                title: 'Know Your Company',
+                desc: 'Start here to understand the business and your role.',
+                status: companyStepStatus,
+                action: `<button class="btn btn-secondary" onclick="switchPage('company')">Open</button>`
+              },
+              {
+                step: 'Step 2',
+                title: 'Learning Hub',
+                desc:
+                  learningStepStatus === 'Completed'
+                    ? 'All core lessons completed.'
+                    : learningStepStatus === 'In Progress'
+                      ? 'Your learning is in progress.'
+                      : 'Begin your lesson journey module by module.',
+                status: learningStepStatus,
+                action: `<button class="btn btn-primary" onclick="switchPage('training')">Go to Learning Hub</button>`
+              },
+              {
+                step: 'Step 3',
+                title: 'Assessments',
+                desc:
+                  assessmentStepStatus === 'In Progress'
+                    ? 'Assessment activity has started.'
+                    : assessmentStepStatus === 'Ready'
+                      ? 'Lessons are done. You can begin assessments.'
+                      : 'Complete learning modules to unlock assessments.',
+                status: assessmentStepStatus,
+                action: `<button class="btn btn-secondary" onclick="switchPage('quiz')" ${assessmentStepStatus === 'Locked' ? 'disabled' : ''}>Open Assessments</button>`
+              },
+              {
+                step: 'Step 4',
+                title: 'Progress & Certificate',
+                desc:
+                  certificateStepStatus === 'Completed'
+                    ? 'Certificate earned successfully.'
+                    : certificateStepStatus === 'In Progress'
+                      ? 'Assessment progress recorded. Certificate pending.'
+                      : 'Pass assessments to unlock certificates.',
+                status: certificateStepStatus,
+                action: `${
+                  certificatesEarned > 0
+                    ? `<button class="btn btn-secondary" onclick="switchPage('dashboard')">View Progress</button>`
+                    : `<button class="btn btn-secondary" onclick="switchPage('dashboard')" ${certificateStepStatus === 'Locked' ? 'disabled' : ''}>Track Progress</button>`
+                }`
+              }
+            ].map(function(item) {
+              const badge = getTrackerBadge(item.status);
+
+              return `
+                <div class="card stat-card" style="border:1px solid #d9e5ef; box-shadow:none;">
+                  <div
+                    class="pill"
+                    style="margin-bottom:10px; background:${badge.bg}; color:${badge.color};"
+                  >
+                    ${badge.label}
+                  </div>
+
+                  <div class="label">${escapeHtml(item.step)}</div>
+                  <div class="value" style="font-size:22px;">${escapeHtml(item.title)}</div>
+                  <div class="muted" style="margin-top:10px;">${escapeHtml(item.desc)}</div>
+
+                  <div class="lesson-actions" style="margin-top:14px;">
+                    ${item.action}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="card">
+          <div class="pill">Company Overview</div>
+          <h3 style="margin-top:10px;">About First Connect Health</h3>
+          <div class="muted" style="margin-top:12px; line-height:1.8; white-space:pre-line;">
+            ${escapeHtml(company.about || 'Company overview will appear here.')}
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="card">
+          <div class="pill">Your Role in This Process</div>
+          <h3 style="margin-top:10px;">How your work moves the process forward</h3>
+
+          <div class="grid grid-4" style="margin-top:18px;">
+            <div class="card" style="padding:18px;">
+              <div class="pill">Step 1</div>
+              <h4 style="margin:10px 0 6px;">Source</h4>
+              <div class="muted">Find relevant candidate profiles using the right tools and search strategy.</div>
+            </div>
+
+            <div class="card" style="padding:18px;">
+              <div class="pill">Step 2</div>
+              <h4 style="margin:10px 0 6px;">Screen</h4>
+              <div class="muted">Review profiles carefully and check fit against the job requirement.</div>
+            </div>
+
+            <div class="card" style="padding:18px;">
+              <div class="pill">Step 3</div>
+              <h4 style="margin:10px 0 6px;">Submit</h4>
+              <div class="muted">Submit complete and accurate candidate details through the correct process.</div>
+            </div>
+
+            <div class="card" style="padding:18px;">
+              <div class="pill">Step 4</div>
+              <h4 style="margin:10px 0 6px;">Follow Up</h4>
+              <div class="muted">Stay aligned with updates, statuses, and next actions until closure.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="card">
+          <div class="pill">Our Standards</div>
+          <h3 style="margin-top:10px;">What good work looks like here</h3>
+
+          ${
+            standards.length
+              ? `<div class="grid grid-2" style="margin-top:18px;">
+                  ${standards.map(function(item) {
+                    const title = typeof item === 'string' ? item : item.title;
+                    const desc = typeof item === 'string'
+                      ? ''
+                      : (item.desc || '');
+
+                    return `
+                      <div class="card" style="padding:18px;">
+                        <div style="font-weight:700;font-size:18px;color:#0f2740;">
+                          ${escapeHtml(title)}
+                        </div>
+                        <div class="muted" style="margin-top:10px; line-height:1.7;">
+                          ${escapeHtml(desc)}
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>`
+              : `<div class="muted" style="margin-top:14px;">No standards available yet.</div>`
+          }
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="card">
+          <div class="pill">First Week at a Glance</div>
+          <h3 style="margin-top:10px;">Your onboarding roadmap</h3>
+
+          <div class="grid grid-3" style="margin-top:18px;">
+            <div class="card" style="padding:18px;">
+              <div class="pill">Day 1</div>
+              <h4 style="margin:10px 0 6px;">Orientation</h4>
+              <div class="muted">Company introduction, access setup, and portal walkthrough.</div>
+            </div>
+
+            <div class="card" style="padding:18px;">
+              <div class="pill">Day 2–3</div>
+              <h4 style="margin:10px 0 6px;">Learn the Process</h4>
+              <div class="muted">Understand recruiter workflow, sourcing basics, and business flow.</div>
+            </div>
+
+            <div class="card" style="padding:18px;">
+              <div class="pill">Day 4–5</div>
+              <h4 style="margin:10px 0 6px;">Apply & Validate</h4>
+              <div class="muted">Complete modules, attempt assessments, and clarify doubts.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h3>Support Contacts</h3>
+        <div class="contacts">
+          ${
+            contacts.length
+              ? contacts.map(function(contact) {
+                  return `
+                    <div class="card contact-card">
+                      <div class="contact-role">${escapeHtml(contact.role)}</div>
+                      <h4>${escapeHtml(contact.name)}</h4>
+                      <div class="muted"><strong>Email:</strong> ${escapeHtml(contact.email)}</div>
+                      <div class="contact-note" style="margin-top:10px;">${escapeHtml(contact.note)}</div>
+                    </div>
+                  `;
+                }).join('')
+              : `<div class="card empty-state">No support contacts available.</div>`
+          }
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="card">
+          <div class="pill">Quick Resources</div>
+          <h3 style="margin-top:10px;">Jump to important sections</h3>
+          <p class="muted">Use these shortcuts to move through the training portal quickly.</p>
+
+          <div class="lesson-actions" style="margin-top:18px;display:flex;flex-wrap:wrap;gap:10px;">
+            <button class="btn btn-secondary" onclick="switchPage('dashboard')">Dashboard</button>
+            <button class="btn btn-secondary" onclick="switchPage('company')">Know Your Company</button>
+            <button class="btn btn-primary" onclick="switchPage('training')">Recruiter Learning Hub</button>
+            <button class="btn btn-secondary" onclick="switchPage('quiz')">Assessments</button>
+            <button class="btn btn-secondary" onclick="switchPage('updates')">Updates & Changes</button>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderAdminPage() {
+    const snap = state.data.adminSnapshot || {};
+
+    return `
+      <div class="top-strip">
+        <div>
+          <h2 class="page-title">Admin</h2>
+          <p class="page-subtitle">Manage updates, users, and portal reports.</p>
+        </div>
+      </div>
+
+      <section class="grid grid-4">
+        <div class="card stat-card">
+          <div class="label">Modules</div>
+          <div class="value">${Number(snap.moduleCount) || 0}</div>
+        </div>
+        <div class="card stat-card">
+          <div class="label">Updates</div>
+          <div class="value">${Number(snap.updateCount) || 0}</div>
+        </div>
+        <div class="card stat-card">
+          <div class="label">Users</div>
+          <div class="value">${Number(snap.userCount) || 0}</div>
+        </div>
+        <div class="card stat-card">
+          <div class="label">Certificates</div>
+          <div class="value">${Number(snap.certificateCount) || 0}</div>
+        </div>
+      </section>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="pill">Add Update</div>
+          <input id="adminAnnouncementTitle" class="field" type="text" placeholder="Update title">
+          <textarea id="adminAnnouncementMessage" class="textarea" placeholder="Update message" style="margin-top:12px;"></textarea>
+          <select id="adminAnnouncementType" class="select" style="margin-top:12px;">
+            <option value="info">Info</option>
+            <option value="success">Success</option>
+            <option value="warning">Warning</option>
+            <option value="announcement">Announcement</option>
+          </select>
+          <div class="lesson-actions" style="margin-top:14px;">
+            <button class="btn btn-primary" id="saveAnnouncementBtn">Save Update</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="pill">Add User</div>
+          <input id="adminUserEmail" class="field" type="email" placeholder="User email">
+          <input id="adminUserName" class="field" type="text" placeholder="User name" style="margin-top:12px;">
+          <select id="adminUserRole" class="select" style="margin-top:12px;">
+            <option value="Trainee">Trainee</option>
+            <option value="Trainer">Trainer</option>
+            <option value="Admin">Admin</option>
+            <option value="Manager">Manager</option>
+            <option value="Account Manager">Account Manager</option>
+            <option value="Recruiter">Recruiter</option>
+            <option value="Team Lead">Team Lead</option>
+            <option value="HR">HR</option>
+            <option value="Recruitment Specialist">Recruitment Specialist</option>
+          </select>
+          <div class="lesson-actions" style="margin-top:14px;">
+            <button class="btn btn-primary" id="saveUserBtn">Add User</button>
+          </div>
+        </div>
+      </div>
+
+      <section class="section">
+        <div class="card">
+          <div class="top-strip" style="margin-bottom:12px;">
+            <div>
+              <div class="pill">Progress Report</div>
+              <h3 style="margin:0;">Trainee Report</h3>
+            </div>
+            <div class="toolbar">
+              <button class="btn btn-secondary" id="loadAdminReportBtn">Load Report</button>
+              ${
+                snap && snap.spreadsheetUrl
+                  ? `<a class="btn btn-primary" target="_blank" href="${escapeHtml(snap.spreadsheetUrl)}">Open Data Sheet</a>`
+                  : ''
+              }
+            </div>
+          </div>
+
+          <div id="adminReportContainer">
+            ${renderAdminReport()}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderAdminReport() {
+    if (!state.adminReport.length) {
+      return `<div class="empty-state">Load the trainee report to view progress and assessment performance.</div>`;
+    }
+
+    return `
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Progress</th>
+            <th>Lessons</th>
+            <th>Avg Score</th>
+            <th>Certificates</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.adminReport.map(function(row) {
+            return `
+              <tr>
+                <td>${escapeHtml(row.name)}</td>
+                <td>${escapeHtml(row.email)}</td>
+                <td>${escapeHtml(row.role)}</td>
+                <td>${Number(row.progressPercent) || 0}%</td>
+                <td>${Number(row.completedLessons) || 0}/${Number(row.totalLessons) || 0}</td>
+                <td>${Number(row.avgQuizScore) || 0}%</td>
+                <td>${Number(row.certificatesEarned) || 0}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function renderChatbotWidget() {
+    const chatbotMessage =
+      ((state.data || {}).settings || {}).chatbotMessage ||
+      'Hi! I can answer questions using the AI Chatbot Knowledge sheet.';
+
+    ensureChatbotWelcomeMessage(chatbotMessage);
+
+    return `
+      <div style="position:fixed;right:24px;bottom:24px;z-index:9999;">
+        ${state.chatbotOpen ? `
+          <div id="chatbotPanel" style="
+            width:360px;
+            max-width:calc(100vw - 24px);
+            height:520px;
+            max-height:calc(100vh - 110px);
+            background:#ffffff;
+            border-radius:22px;
+            box-shadow:0 18px 48px rgba(15,79,134,0.22);
+            border:1px solid #e6eef6;
+            overflow:hidden;
+            margin-bottom:12px;
+            display:flex;
+            flex-direction:column;
+          ">
+            
+            <div style="
+              background:#0f4f86;
+              color:#ffffff;
+              padding:14px 16px;
+              font-weight:700;
+              display:flex;
+              justify-content:space-between;
+              align-items:center;
+            ">
+              <div>
+                <div style="font-size:15px;font-weight:700;">AI Assistant</div>
+              </div>
+              <button
+                type="button"
+                onclick="toggleChatbot()"
+                aria-label="Close assistant"
+                style="background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;"
+              >×</button>
+            </div>
+
+            <div id="chatbotMessages" style="
+              flex:1;
+              overflow-y:auto;
+              padding:14px;
+              background:linear-gradient(180deg,#f8fbff 0%, #ffffff 100%);
+            ">
+              ${renderChatbotMessages()}
+              ${state.chatbotLoading ? `
+                <div style="display:flex;justify-content:flex-start;margin-top:10px;">
+                  <div style="
+                    max-width:86%;
+                    background:#eef5fb;
+                    color:#35556e;
+                    border:1px solid #dbe8f3;
+                    border-radius:16px 16px 16px 4px;
+                    padding:10px 12px;
+                    font-size:14px;
+                  ">
+                    Searching knowledge...
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+
+            <div style="
+              border-top:1px solid #e6eef6;
+              background:#ffffff;
+              padding:12px;
+            ">
+              <form id="chatbotForm" style="display:block;">
+                <div style="
+                  display:flex;
+                  align-items:flex-end;
+                  gap:8px;
+                  border:1px solid #d8e5f0;
+                  border-radius:18px;
+                  padding:8px;
+                  background:#ffffff;
+                  box-shadow:inset 0 1px 2px rgba(15,79,134,0.04);
+                ">
+                  <textarea
+                    id="chatbotInput"
+                    placeholder="How can I help you..."
+                    style="
+                      flex:1;
+                      min-height:44px;
+                      max-height:120px;
+                      resize:none;
+                      border:none;
+                      outline:none;
+                      padding:10px 12px;
+                      background:transparent;
+                      font:inherit;
+                      line-height:1.45;
+                    "
+                  >${escapeHtml(state.chatbotInputDraft || '')}</textarea>
+
+                  <button
+                    type="submit"
+                    id="chatbotSendBtn"
+                    aria-label="Send message"
+                    title="Send"
+                    style="
+                      width:42px;
+                      height:42px;
+                      border:none;
+                      border-radius:999px;
+                      background:${state.chatbotLoading ? '#9db8cf' : '#0f4f86'};
+                      color:#ffffff;
+                      display:flex;
+                      align-items:center;
+                      justify-content:center;
+                      cursor:${state.chatbotLoading ? 'not-allowed' : 'pointer'};
+                      flex:0 0 auto;
+                      font-size:18px;
+                      font-weight:700;
+                    "
+                    ${state.chatbotLoading ? 'disabled' : ''}
+                  >
+                    △
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        ` : ''}
+
+        <button
+          id="chatbotFab"
+          type="button"
+          onclick="toggleChatbot()"
+          aria-label="Open AI assistant"
+          style="
+            width:58px;
+            height:58px;
+            border:none;
+            border-radius:999px;
+            background:#0f4f86;
+            color:#fff;
+            font-size:22px;
+            cursor:pointer;
+            box-shadow:0 12px 32px rgba(15,79,134,0.28);
+          "
+        >
+          🤖
+        </button>
+      </div>
+    `;
+  }
+
+  function renderChatbotMessages() {
+    if (!state.chatbotMessages.length) {
+      return `
+        <div style="text-align:center;padding:18px 12px;color:#6a8093;font-size:14px;">
+          Start a conversation with the assistant.
+        </div>
+      `;
+    }
+
+    return state.chatbotMessages.map(function(message) {
+      const isUser = message.role === 'user';
+
+      return `
+        <div style="display:flex;justify-content:${isUser ? 'flex-end' : 'flex-start'};margin-bottom:10px;">
+          <div style="
+            max-width:86%;
+            padding:12px 14px;
+            border-radius:${isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px'};
+            background:${isUser ? '#0f4f86' : '#eef5fb'};
+            color:${isUser ? '#ffffff' : '#244258'};
+            border:${isUser ? 'none' : '1px solid #dbe8f3'};
+            box-shadow:${isUser ? '0 8px 20px rgba(15,79,134,0.16)' : 'none'};
+          ">
+            <div style="font-size:14px;line-height:1.6;white-space:pre-wrap;">${formatChatMessageText(message.text)}</div>
+            ${!isUser ? renderChatbotLinks(message.links) : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderChatbotLinks(links) {
+    if (!Array.isArray(links) || !links.length) {
+      return '';
+    }
+
+    const safeLinks = links.filter(function(link) {
+      return link && link.url && link.title;
+    });
+
+    if (!safeLinks.length) {
+      return '';
+    }
+
+    return `
+      <div style="margin-top:10px;display:grid;gap:8px;">
+        ${safeLinks.map(function(link) {
+          return `
+            <a
+              href="${escapeHtml(link.url)}"
+              target="_blank"
+              rel="noopener noreferrer"
+              style="
+                display:block;
+                padding:9px 10px;
+                border-radius:12px;
+                background:#ffffff;
+                border:1px solid #d8e5f0;
+                color:#0f4f86;
+                font-size:13px;
+                font-weight:700;
+                text-decoration:none;
+              "
+            >
+              ${escapeHtml(link.title)}
+            </a>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function formatChatMessageText(text) {
+    return escapeHtml(text || '');
+  }
+
+  function ensureChatbotWelcomeMessage(chatbotMessage) {
+    if (state.chatbotInitialized) {
+      return;
+    }
+
+    state.chatbotMessages = [
+      {
+        role: 'assistant',
+        text: chatbotMessage,
+        links: []
+      }
+    ];
+
+    state.chatbotInitialized = true;
+  }
+
+  function toggleChatbot() {
+    state.chatbotOpen = !state.chatbotOpen;
+    renderApp();
+
+    if (state.chatbotOpen) {
+      scrollChatbotToBottom();
+
+      const input = document.getElementById('chatbotInput');
+      if (input) {
+        input.focus();
+      }
+    }
+
+    if (state.currentPage !== 'dashboard') {
+      switchPage(state.currentPage);
+    }
+  }
+
+  function bindAuthActions() {
+    const sendBtn = document.getElementById('sendOtpBtn');
+    const verifyBtn = document.getElementById('verifyOtpBtn');
+    const otpInput = document.getElementById('otpInput');
+
+    if (otpInput) {
+      otpInput.addEventListener('input', function() {
+        state.otpValue = (this.value || '').replace(/\D/g, '').slice(0, 6);
+        this.value = state.otpValue;
+      });
+
+      otpInput.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          verifyCurrentOtp();
+        }
+      });
+    }
+
+    if (sendBtn) {
+      sendBtn.addEventListener('click', function() {
+        sendCurrentOtp();
+      });
+    }
+
+    if (verifyBtn) {
+      verifyBtn.addEventListener('click', function() {
+        verifyCurrentOtp();
+      });
+    }
+  }
+
+  function sendCurrentOtp() {
+    if (state.authBusy) return;
+
+    state.authBusy = true;
+    renderApp();
+
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        state.authBusy = false;
+        state.authMessage = (resp && resp.message) || 'OTP sent to your company email.';
+        renderApp();
+        showToast('OTP sent.');
+      })
+      .withFailureHandler(function(err) {
+        state.authBusy = false;
+        renderApp();
+        showToast('Failed to send OTP: ' + getErrorMessage(err));
+      })
+      .sendLoginOtp();
+  }
+
+  function verifyCurrentOtp() {
+    if (state.authBusy) return;
+
+    const otp = (state.otpValue || '').trim();
+
+    if (!otp || otp.length !== 6) {
+      showToast('Please enter a valid 6-digit OTP.');
+      return;
+    }
+
+    state.authBusy = true;
+    renderApp();
+
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        state.authBusy = false;
+
+        if (!resp || !resp.success) {
+          state.authMessage = (resp && resp.message) || 'OTP verification failed.';
+          renderApp();
+          showToast(state.authMessage);
+          return;
+        }
+
+        state.authRequired = false;
+        state.authMode = '';
+        state.authMessage = '';
+        state.otpValue = '';
+
+        renderApp();
+        showToast('Verification successful.');
+
+        startInactivityWatch();
+        bindGlobalActivityWatch();
+        notifyUserActivity();
+      })
+      .withFailureHandler(function(err) {
+        state.authBusy = false;
+        renderApp();
+        showToast('Verification failed: ' + getErrorMessage(err));
+      })
+      .verifyLoginOtp(otp);
+  }
+
+  function startInactivityWatch() {
+    clearInactivityWatch();
+
+    state.inactivityTimerId = window.setTimeout(function() {
+      triggerReverification();
+    }, state.inactivityMinutes * 60 * 1000);
+  }
+
+  function clearInactivityWatch() {
+    if (state.inactivityTimerId) {
+      window.clearTimeout(state.inactivityTimerId);
+      state.inactivityTimerId = null;
+    }
+  }
+
+  function resetInactivityWatch() {
+    if (state.authRequired) return;
+    startInactivityWatch();
+    notifyUserActivity();
+  }
+
+  function bindGlobalActivityWatch() {
+    if (window.__authActivityBound) return;
+    window.__authActivityBound = true;
+
+    ['click', 'keydown', 'mousemove', 'scroll'].forEach(function(eventName) {
+      window.addEventListener(eventName, debounceActivity(resetInactivityWatch, 15000), true);
+    });
+  }
+
+  function debounceActivity(fn, delay) {
+    let timer = null;
+    return function() {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(fn, delay);
+    };
+  }
+
+  function triggerReverification() {
+    state.authRequired = true;
+    state.authMode = 'reauth';
+    state.authMessage = 'You were inactive for more than ' + state.inactivityMinutes + ' minutes. Please verify OTP to continue.';
+    state.otpValue = '';
+    clearInactivityWatch();
+    renderApp();
+
+    google.script.run
+      .withFailureHandler(function(err) {
+        console.error('Failed to log re-verification requirement', err);
+      })
+      .markSessionReverificationRequired();
+  }
+
+  function notifyUserActivity() {
+    google.script.run
+      .withFailureHandler(function(err) {
+        console.error('Activity update failed', err);
+      })
+      .updateUserActivity();
+  }
+
+  function bindChatbotActions() {
+    const form = document.getElementById('chatbotForm');
+    const input = document.getElementById('chatbotInput');
+
+    if (!form || !input) {
+      return;
+    }
+
+    input.addEventListener('input', function() {
+      state.chatbotInputDraft = this.value || '';
+    });
+
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      handleChatbotSubmit();
+    });
+
+    input.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        handleChatbotSubmit();
+      }
+    });
+
+    scrollChatbotToBottom();
+  }
+
+  function handleChatbotSubmit() {
+    if (state.chatbotLoading) {
+      return;
+    }
+
+    const input = document.getElementById('chatbotInput');
+    const question = input ? (input.value || '').trim() : '';
+
+    if (!question) {
+      showToast('Please enter a question.');
+      return;
+    }
+
+    state.chatbotMessages.push({
+      role: 'user',
+      text: question,
+      links: []
+    });
+
+    state.chatbotInputDraft = '';
+    state.chatbotLoading = true;
+
+    renderApp();
+    scrollChatbotToBottom();
+
+    google.script.run
+      .withSuccessHandler(function(response) {
+        let assistantText = 'Sorry, I could not find a grounded answer for that question.';
+        let assistantLinks = [];
+
+        if (response && typeof response === 'object') {
+          if (response.answer) {
+            assistantText = String(response.answer);
+          }
+
+          if (Array.isArray(response.links)) {
+            assistantLinks = response.links
+              .filter(function(link) {
+                return link && link.title && link.url;
+              })
+              .map(function(link) {
+                return {
+                  title: String(link.title),
+                  url: String(link.url)
+                };
+              });
+          }
+        } else if (typeof response === 'string' && response.trim()) {
+          assistantText = response.trim();
+        }
+
+        state.chatbotMessages.push({
+          role: 'assistant',
+          text: assistantText,
+          links: assistantLinks
+        });
+
+        state.chatbotLoading = false;
+        renderApp();
+        scrollChatbotToBottom();
+      })
+      .withFailureHandler(function(err) {
+        state.chatbotMessages.push({
+          role: 'assistant',
+          text: 'Sorry, the assistant could not respond right now. ' + getErrorMessage(err),
+          links: []
+        });
+
+        state.chatbotLoading = false;
+        renderApp();
+        scrollChatbotToBottom();
+      })
+      .askAssistant(question);
+  }
+
+  function scrollChatbotToBottom() {
+    window.setTimeout(function() {
+      const box = document.getElementById('chatbotMessages');
+      if (box) {
+        box.scrollTop = box.scrollHeight;
+      }
+    }, 0);
+  }
+
+  function bindMenu() {
+    document.querySelectorAll('.menu-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        switchPage(this.getAttribute('data-page'));
+      });
+    });
+  }
+
+  function bindTrainingActions() {
+  function markLessonInProgress(moduleId, lessonName, callback) {
+    const progressKey = buildProgressKey(moduleId, lessonName);
+    const currentStatus = String((state.data.progressMap || {})[progressKey] || 'Not Started');
+
+    if (currentStatus === 'Completed' || currentStatus === 'In Progress') {
+      if (typeof callback === 'function') callback();
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        state.data.progressSummary = resp.progressSummary;
+        state.data.progressMap = resp.progressMap;
+        state.data.dashboardStats = resp.dashboardStats;
+
+        if (typeof callback === 'function') callback();
+
+        showToast('Progress updated: ' + lessonName + ' → In Progress');
+      })
+      .withFailureHandler(function(err) {
+        showToast('Failed to update progress: ' + getErrorMessage(err));
+        renderApp();
+      })
+      .updateLessonProgress({
+        moduleId: moduleId,
+        lessonName: lessonName,
+        status: 'In Progress'
+      });
+  }
+
+  function hideLessonPreviewBox(box) {
+    if (!box) return;
+    box.style.display = 'none';
+  }
+
+  function showLessonPreviewBox(box) {
+    if (!box) return;
+    box.style.display = 'block';
+  }
+
+  function closeSiblingPreviewBoxes(currentBox) {
+    if (!currentBox) return;
+
+    const lessonRow = currentBox.closest('.lesson-row');
+    if (!lessonRow) return;
+
+    lessonRow.querySelectorAll('.lesson-preview-box').forEach(function(box) {
+      if (box !== currentBox) {
+        hideLessonPreviewBox(box);
+      }
+    });
+  }
+
+  document.querySelectorAll('.video-progress-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const moduleId = this.getAttribute('data-module-id');
+      const lessonName = this.getAttribute('data-lesson-name');
+      const targetId = this.getAttribute('data-target-id');
+      const videoBox = targetId ? document.getElementById(targetId) : null;
+
+      if (videoBox) {
+        const isHidden = videoBox.style.display === 'none' || videoBox.style.display === '';
+
+        if (isHidden) {
+          closeSiblingPreviewBoxes(videoBox);
+          showLessonPreviewBox(videoBox);
+        } else {
+          hideLessonPreviewBox(videoBox);
+        }
+      }
+
+      markLessonInProgress(moduleId, lessonName);
+    });
+  });
+
+  document.querySelectorAll('.resource-progress-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const moduleId = this.getAttribute('data-module-id');
+      const lessonName = this.getAttribute('data-lesson-name');
+      const targetId = this.getAttribute('data-target-id');
+      const pdfUrl = this.getAttribute('data-pdf-url') || '';
+      const inlinePdfContainerId = this.getAttribute('data-inline-pdf-container-id') || '';
+      const resourceBox = targetId ? document.getElementById(targetId) : null;
+
+      if (resourceBox) {
+        const isHidden = resourceBox.style.display === 'none' || resourceBox.style.display === '';
+
+        if (isHidden) {
+          closeSiblingPreviewBoxes(resourceBox);
+          showLessonPreviewBox(resourceBox);
+
+          if (pdfUrl && inlinePdfContainerId) {
+            loadPdfIntoContainer(pdfUrl, inlinePdfContainerId);
+          }
+        } else {
+          hideLessonPreviewBox(resourceBox);
+        }
+      }
+
+      markLessonInProgress(moduleId, lessonName);
+    });
+  });
+
+  document.querySelectorAll('.resource-expand-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const resourceUrl = this.getAttribute('data-resource-url') || '';
+      const resourceTitle = this.getAttribute('data-resource-title') || 'Resource Preview';
+      openResourceModal(resourceUrl, resourceTitle);
+    });
+  });
+}
+
+  function renderResourceModal() {
+    return `
+      <div
+        id="resourceModal"
+        style="
+          display:none;
+          position:fixed;
+          inset:0;
+          background:rgba(8,16,28,0.94);
+          z-index:10001;
+          padding:10px;
+          box-sizing:border-box;
+          align-items:center;
+          justify-content:center;
+        "
+      >
+        <div
+          style="
+            position:relative;
+            width:99vw;
+            height:98vh;
+            display:flex;
+            flex-direction:column;
+            align-items:stretch;
+            justify-content:center;
+            background:#ffffff;
+            border-radius:18px;
+            overflow:hidden;
+            box-shadow:0 24px 60px rgba(0,0,0,0.35);
+          "
+        >
+          <div
+            style="
+              display:flex;
+              align-items:center;
+              justify-content:space-between;
+              gap:12px;
+              padding:14px 18px;
+              border-bottom:1px solid #dbe8f3;
+              background:#f8fbff;
+            "
+          >
+            <div
+              id="resourceModalTitle"
+              style="
+                font-size:16px;
+                font-weight:700;
+                color:#0f2740;
+              "
+            >
+              Resource Preview
+            </div>
+
+            <button
+              type="button"
+              id="resourceModalClose"
+              aria-label="Close resource preview"
+              style="
+                width:42px;
+                height:42px;
+                border:none;
+                border-radius:999px;
+                background:#ffffff;
+                color:#0f4f86;
+                font-size:24px;
+                font-weight:700;
+                cursor:pointer;
+                box-shadow:0 8px 18px rgba(0,0,0,0.12);
+              "
+            >
+              ×
+            </button>
+          </div>
+
+          <div
+            id="resourceModalBody"
+            style="
+              flex:1;
+              width:100%;
+              background:#eef4f9;
+              padding:14px;
+              box-sizing:border-box;
+              overflow:auto;
+            "
+          >
+            <div
+              style="
+                min-height:220px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                color:#5f7285;
+                font-size:14px;
+                background:#ffffff;
+                border:1px solid #d8e5f0;
+                border-radius:14px;
+              "
+            >
+              Select a PDF to preview.
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindResourceModalActions() {
+    const modal = document.getElementById('resourceModal');
+    const closeBtn = document.getElementById('resourceModalClose');
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeResourceModal);
+    }
+
+    if (modal) {
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) {
+          closeResourceModal();
+        }
+      });
+    }
+
+    document.addEventListener('keydown', function(event) {
+      const resourceModal = document.getElementById('resourceModal');
+      if (!resourceModal) return;
+
+      if (event.key === 'Escape' && resourceModal.style.display === 'flex') {
+        closeResourceModal();
+      }
+    });
+  }
+
+  function openResourceModal(resourceUrl, resourceTitle) {
+    const modal = document.getElementById('resourceModal');
+    const body = document.getElementById('resourceModalBody');
+    const title = document.getElementById('resourceModalTitle');
+
+    if (!modal || !body || !resourceUrl) return;
+
+    if (title) {
+      title.textContent = resourceTitle || 'Resource Preview';
+    }
+
+    body.innerHTML = renderPdfViewerShell('resourceModalPdfContainer', resourceUrl);
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    loadPdfIntoContainer(resourceUrl, 'resourceModalPdfContainer');
+  }
+
+  function closeResourceModal() {
+    const modal = document.getElementById('resourceModal');
+    const body = document.getElementById('resourceModalBody');
+    const title = document.getElementById('resourceModalTitle');
+
+    if (body) {
+      body.innerHTML = `
+        <div
+          style="
+            min-height:220px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            color:#5f7285;
+            font-size:14px;
+            background:#ffffff;
+            border:1px solid #d8e5f0;
+            border-radius:14px;
+          "
+        >
+          Select a PDF to preview.
+        </div>
+      `;
+    }
+
+    if (title) {
+      title.textContent = 'Resource Preview';
+    }
+
+    if (modal) {
+      modal.style.display = 'none';
+    }
+
+    document.body.style.overflow = '';
+  }
+
+  function bindTrainingVisualActions() {
+    document.querySelectorAll('.training-visual-trigger').forEach(function(card) {
+      card.addEventListener('click', function() {
+        const imageUrl = this.getAttribute('data-image-url') || '';
+        const imageTitle = this.getAttribute('data-image-title') || 'Training Visual';
+        openTrainingImageModal(imageUrl, imageTitle);
+      });
+    });
+
+    const modal = document.getElementById('trainingImageModal');
+    const closeBtn = document.getElementById('trainingImageModalClose');
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeTrainingImageModal);
+    }
+
+    if (modal) {
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) {
+          closeTrainingImageModal();
+        }
+      });
+    }
+  }
+
+  function openTrainingImageModal(imageUrl, imageTitle) {
+    const modal = document.getElementById('trainingImageModal');
+    const img = document.getElementById('trainingImageModalImg');
+
+    if (!modal || !img || !imageUrl) return;
+
+    img.onload = null;
+    img.onerror = function() {
+      showToast('Unable to open image. Check Drive sharing and file ID.');
+      closeTrainingImageModal();
+    };
+
+    img.src = imageUrl;
+    img.alt = imageTitle || 'Training Visual';
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeTrainingImageModal() {
+    const modal = document.getElementById('trainingImageModal');
+    const img = document.getElementById('trainingImageModalImg');
+
+    if (img) {
+      img.src = '';
+      img.alt = '';
+    }
+
+    if (modal) {
+      modal.style.display = 'none';
+    }
+
+    document.body.style.overflow = '';
+  }
+
+  function bindQuizActions() {
+    const submitBtn = document.getElementById('submitQuizBtn');
+    const moduleSelect = document.getElementById('quizModuleSelect');
+
+    if (moduleSelect) {
+      moduleSelect.addEventListener('change', function() {
+        const moduleId = this.value || '';
+        loadQuizQuestionsForModule(moduleId);
+      });
+    }
+
+    if (submitBtn) {
+      submitBtn.addEventListener('click', function() {
+        const moduleId = (document.getElementById('quizModuleSelect') || {}).value || '';
+
+        if (!moduleId) {
+          showToast('Please select a module first.');
+          return;
+        }
+
+        if (!state.quizQuestions || !state.quizQuestions.length) {
+          showToast('No assessment loaded.');
+          return;
+        }
+
+        collectQuizAnswersFromDOM();
+
+        const unanswered = state.quizQuestions.filter(function(q) {
+          return !state.quizAnswers[q.questionId];
+        });
+
+        if (unanswered.length) {
+          showToast('Please answer all questions before submitting.');
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            state.quizResult = result;
+
+            if (result && result.quizSummary) {
+              state.data.quizSummary = result.quizSummary;
+            }
+
+            renderApp();
+            switchPage('quiz');
+            showToast('Assessment submitted.');
+          })
+          .withFailureHandler(function(err) {
+            showToast('Failed to submit assessment: ' + getErrorMessage(err));
+          })
+          .submitQuiz({
+            moduleId: moduleId,
+            questionIds: state.quizQuestions.map(function(q) {
+              return q.questionId;
+            }),
+            answers: state.quizAnswers
+          });
+      });
+    }
+
+    bindQuizOptionListeners();
+
+    if (state.currentPage === 'quiz' && state.selectedModuleQuiz && !state.quizQuestions.length) {
+      loadQuizQuestionsForModule(state.selectedModuleQuiz);
+    }
+  }
+
+  function loadQuizQuestionsForModule(moduleId) {
+    state.selectedModuleQuiz = moduleId;
+    state.quizQuestions = [];
+    state.quizAnswers = {};
+    state.quizResult = null;
+
+    const moduleSelect = document.getElementById('quizModuleSelect');
+    if (moduleSelect && moduleSelect.value !== moduleId) {
+      moduleSelect.value = moduleId;
+    }
+
+    const quizContainer = document.getElementById('quizContainer');
+    if (quizContainer) {
+      quizContainer.innerHTML = moduleId
+        ? '<div class="empty-state">Loading assessment questions...</div>'
+        : '<div class="empty-state">Select a module to see questions here.</div>';
+    }
+
+    if (!moduleId) {
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(questions) {
+        state.quizQuestions = Array.isArray(questions) ? questions : [];
+        state.quizAnswers = {};
+        state.quizResult = null;
+
+        const updatedQuizContainer = document.getElementById('quizContainer');
+        if (updatedQuizContainer) {
+          updatedQuizContainer.innerHTML = renderQuizQuestions();
+        }
+
+        bindQuizOptionListeners();
+
+        if (!state.quizQuestions.length) {
+          showToast('No assessment questions found for this module.');
+          return;
+        }
+
+        showToast('Assessment loaded automatically.');
+      })
+      .withFailureHandler(function(err) {
+        state.quizQuestions = [];
+        state.quizAnswers = {};
+        state.quizResult = null;
+
+        const updatedQuizContainer = document.getElementById('quizContainer');
+        if (updatedQuizContainer) {
+          updatedQuizContainer.innerHTML = '<div class="empty-state">Failed to load assessment questions.</div>';
+        }
+
+        showToast('Failed to load assessment: ' + getErrorMessage(err));
+      })
+      .getQuizQuestionsByModule(moduleId);
+  }
+
+  function bindQuizOptionListeners() {
+    document.querySelectorAll('#quizContainer input[type="radio"]').forEach(function(input) {
+      input.addEventListener('change', function() {
+        const qid = this.name.replace('quiz_', '');
+        state.quizAnswers[qid] = this.value;
+      });
+    });
+  }
+
+  function collectQuizAnswersFromDOM() {
+    document.querySelectorAll('#quizContainer input[type="radio"]:checked').forEach(function(input) {
+      const qid = input.name.replace('quiz_', '');
+      state.quizAnswers[qid] = input.value;
+    });
+  }
+
+  function bindAdminActions() {
+    const saveAnnouncementBtn = document.getElementById('saveAnnouncementBtn');
+    const saveUserBtn = document.getElementById('saveUserBtn');
+    const loadReportBtn = document.getElementById('loadAdminReportBtn');
+
+    if (saveAnnouncementBtn) {
+      saveAnnouncementBtn.addEventListener('click', function() {
+        const title = getValue('adminAnnouncementTitle');
+        const message = getValue('adminAnnouncementMessage');
+        const type = getValue('adminAnnouncementType');
+
+        google.script.run
+          .withSuccessHandler(function(updates) {
+            state.data.updates = updates || [];
+            showToast('Update added successfully.');
+            refreshPortalStateAfterServerAction();
+          })
+          .withFailureHandler(function(err) {
+            showToast('Failed to add update: ' + getErrorMessage(err));
+          })
+          .addUpdate({ title: title, message: message, type: type });
+      });
+    }
+
+    if (saveUserBtn) {
+      saveUserBtn.addEventListener('click', function() {
+        const email = getValue('adminUserEmail');
+        const name = getValue('adminUserName');
+        const role = getValue('adminUserRole');
+
+        google.script.run
+          .withSuccessHandler(function() {
+            showToast('User added successfully.');
+            refreshPortalStateAfterServerAction();
+          })
+          .withFailureHandler(function(err) {
+            showToast('Failed to add user: ' + getErrorMessage(err));
+          })
+          .addUser({ email: email, name: name, role: role });
+      });
+    }
+
+    if (loadReportBtn) {
+      loadReportBtn.addEventListener('click', function() {
+        google.script.run
+          .withSuccessHandler(function(report) {
+            state.adminReport = report || [];
+            const box = document.getElementById('adminReportContainer');
+            if (box) box.innerHTML = renderAdminReport();
+          })
+          .withFailureHandler(function(err) {
+            showToast('Failed to load report: ' + getErrorMessage(err));
+          })
+          .getAdminUserProgressReport();
+      });
+    }
+  }
+
+  function refreshPortalStateAfterServerAction() {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        state.data = data;
+        renderApp();
+        if (state.currentPage !== 'dashboard') switchPage(state.currentPage);
+      })
+      .withFailureHandler(function(err) {
+        showToast('Refresh failed: ' + getErrorMessage(err));
+      })
+      .refreshPortalData();
+  }
+
+  function switchPage(page) {
+  state.currentPage = page;
+
+  if (page === 'training' && (!state.data.modules || !state.data.modules.length)) {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        state.data.modules = resp.modules || [];
+        state.data.progressMap = resp.progressMap || {};
+        renderApp();
+      })
+      .withFailureHandler(function(err) {
+        showToast('Failed to load training data: ' + getErrorMessage(err));
+        renderApp();
+      })
+      .getTrainingPageData();
+    renderApp();
+    return;
+  }
+
+  if (page === 'company' && !state.data.company) {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        state.data.company = resp.company || {};
+        state.data.faq = resp.faq || [];
+        renderApp();
+      })
+      .withFailureHandler(function(err) {
+        showToast('Failed to load company data: ' + getErrorMessage(err));
+        renderApp();
+      })
+      .getCompanyPageData();
+    renderApp();
+    return;
+  }
+
+  if (page === 'updates' && (!state.data.updates || !state.data.updates.length)) {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        state.data.updates = resp.updates || [];
+        renderApp();
+      })
+      .withFailureHandler(function(err) {
+        showToast('Failed to load updates: ' + getErrorMessage(err));
+        renderApp();
+      })
+      .getUpdatesPageData();
+    renderApp();
+    return;
+  }
+
+  if (page === 'admin' && state.data.access.isAdmin && !state.data.adminSnapshot) {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        state.data.adminSnapshot = resp.adminSnapshot || {};
+        renderApp();
+      })
+      .withFailureHandler(function(err) {
+        showToast('Failed to load admin data: ' + getErrorMessage(err));
+        renderApp();
+      })
+      .getAdminPageData();
+    renderApp();
+    return;
+  }
+
+  renderApp();
+}
+
+  function openModuleQuiz(moduleId) {
+  state.selectedModuleQuiz = moduleId || '';
+  state.quizQuestions = [];
+  state.quizAnswers = {};
+  state.quizResult = null;
+  state.currentPage = 'quiz';
+  renderApp();
+
+  if (moduleId) {
+    loadQuizQuestionsForModule(moduleId);
+  }
+}
+
+  function isActive(page) {
+    return state.currentPage === page ? 'active' : '';
+  }
+
+  function isPage(page) {
+    return state.currentPage === page ? 'active' : '';
+  }
+
+  function statusClass(status) {
+    const val = String(status || '').toLowerCase();
+    if (val === 'completed') return 'status-completed';
+    if (val === 'in progress') return 'status-in-progress';
+    return 'status-not-started';
+  }
+
+  function getTrackerBadge(status) {
+    const map = {
+      'Completed': { label: 'Completed', bg: '#e8f7ee', color: '#1d7f49' },
+      'In Progress': { label: 'In Progress', bg: '#e8f1fb', color: '#0f4f86' },
+      'Ready': { label: 'Ready', bg: '#fff4dd', color: '#9a6a00' },
+      'Not Started': { label: 'Not Started', bg: '#eef2f6', color: '#5f7285' },
+      'Locked': { label: 'Locked', bg: '#f3f4f6', color: '#7b8794' }
+    };
+
+    return map[status] || map['Not Started'];
+  }
+
+  function buildProgressKey(moduleId, lessonName) {
+    return moduleId + '||' + lessonName;
+  }
+
+  function getValue(id) {
+    const el = document.getElementById(id);
+    return el ? (el.value || '').trim() : '';
+  }
+
+  function showToast(message) {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const div = document.createElement('div');
+    div.className = 'toast';
+    div.textContent = message;
+    document.body.appendChild(div);
+
+    setTimeout(function() {
+      div.remove();
+    }, 2800);
+  }
+
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  initApp();
+</script>
