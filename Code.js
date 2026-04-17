@@ -38,7 +38,6 @@ function initializePortalData() {
   seedQuizzesSheet_(ss);
   seedQuizResultsSheet_(ss);
   seedCertificatesSheet_(ss);
-  seedSettingsSheet_(ss);
   seedDailyLearningSheet_(ss);
   return 'Training Portal data initialized: ' + ss.getUrl();
 }
@@ -72,7 +71,8 @@ function getPortalBootstrap() {
       progress: { seenCardIds: [], learnedCardIds: [] },
       streak: { currentStreak: 0, bestStreak: 0, totalXp: 0, lastLearnedDate: '' },
       meta: { streak: 0, todayCompleted: false, totalXp: 0, todayXp: 0 },
-      weeklyStatus: []
+      weeklyStatus: [],
+      leaderboard: []
     },
 
     updates: [],
@@ -129,6 +129,8 @@ function getPortalBootstrap() {
   const progressSummary = getProgressSummary_(ss, user.email);
   const quizSummary = getQuizSummary_(ss, user.email);
   const dashboardStats = getDashboardStatsLight_(ss, user.email, progressSummary, quizSummary);
+  const modules = getModulesCached_(ss);
+  const progressMap = getProgressMap_(ss, user.email);
 
   portalData.auth = authState;
   portalData.dailyLearning = {
@@ -137,15 +139,187 @@ function getPortalBootstrap() {
     progress: getDailyLearningUserProgress_(ss, user.email),
     streak: getUserStreak_(ss, user.email),
     meta: getDailyLearningMeta_(user.email, todayCard),
-    weeklyStatus: getWeeklyDailyStatus_(user.email)
+    weeklyStatus: getWeeklyDailyStatus_(user.email),
+    leaderboard: getDailyLearningLeaderboard_(ss, user.email, 5)
   };
   portalData.updates = updates;
   portalData.progressSummary = progressSummary;
   portalData.quizSummary = quizSummary;
   portalData.dashboardStats = dashboardStats;
+  portalData.modules = modules;
+  portalData.progressMap = progressMap;
   portalData.recommendedAction = getRecommendedAction_(portalData);
 
   return portalData;
+}
+function getInitialPortalBootstrap() {
+  const user = getUserInfo_();
+  const access = evaluateUserAccess_(user);
+  const ss = getOrCreateSpreadsheet_();
+  const authState = getAuthBootstrap_(ss, user);
+
+  const portalData = {
+    appName: CONFIG.APP_NAME,
+    supportEmail: CONFIG.SUPPORT_EMAIL,
+    companyWebsite: CONFIG.COMPANY_WEBSITE,
+    user: user,
+    access: access,
+    settings: getSettingsCached_(ss),
+    auth: authState,
+
+    dailyLearning: {
+      items: [],
+      todayCard: null,
+      progress: { seenCardIds: [], learnedCardIds: [] },
+      streak: { currentStreak: 0, bestStreak: 0, totalXp: 0, lastLearnedDate: '' },
+      meta: { streak: 0, todayCompleted: false, totalXp: 0, todayXp: 0 },
+      weeklyStatus: [],
+      leaderboard: []
+    },
+
+    updates: [],
+    progressSummary: {
+      progressPercent: 0,
+      completedLessons: 0,
+      inProgressLessons: 0,
+      totalLessons: 0,
+      currentWeek: '',
+      nextTask: ''
+    },
+    quizSummary: {
+      quizzesTaken: 0,
+      avgQuizScore: 0,
+      certificatesEarned: 0,
+      certificates: []
+    },
+    dashboardStats: {
+      moduleCount: 0,
+      resourceCount: 0,
+      updateCount: 0,
+      progressPercent: 0,
+      completedLessons: 0,
+      totalLessons: 0,
+      currentWeek: '',
+      nextTask: '',
+      quizzesTaken: 0,
+      avgQuizScore: 0,
+      certificatesEarned: 0
+    },
+
+    modules: [],
+    progressMap: {},
+    resources: [],
+    adminSnapshot: null,
+    recommendedAction: {
+      type: 'explore',
+      label: 'Explore your training portal',
+      page: 'dashboard'
+    }
+  };
+
+  if (!access.allowed) {
+    portalData.restricted = {
+      title: 'Access Denied',
+      message: 'This website is not available for your account.',
+      detail: 'Please contact the administrator if you believe this is an error.'
+    };
+    return portalData;
+  }
+
+  return portalData;
+}
+function getDeferredPortalBootstrapData() {
+  const user = getUserInfo_();
+  const access = evaluateUserAccess_(user);
+  const ss = getOrCreateSpreadsheet_();
+
+  if (!access.allowed) {
+    return {
+      dailyLearning: {
+        items: [],
+        todayCard: null,
+        progress: { seenCardIds: [], learnedCardIds: [] },
+        streak: { currentStreak: 0, bestStreak: 0, totalXp: 0, lastLearnedDate: '' },
+        meta: { streak: 0, todayCompleted: false, totalXp: 0, todayXp: 0 },
+        weeklyStatus: [],
+        leaderboard: []
+      },
+      updates: [],
+      progressSummary: {
+        progressPercent: 0,
+        completedLessons: 0,
+        inProgressLessons: 0,
+        totalLessons: 0,
+        currentWeek: '',
+        nextTask: ''
+      },
+      quizSummary: {
+        quizzesTaken: 0,
+        avgQuizScore: 0,
+        certificatesEarned: 0,
+        certificates: []
+      },
+      dashboardStats: {
+        moduleCount: 0,
+        resourceCount: 0,
+        updateCount: 0,
+        progressPercent: 0,
+        completedLessons: 0,
+        totalLessons: 0,
+        currentWeek: '',
+        nextTask: '',
+        quizzesTaken: 0,
+        avgQuizScore: 0,
+        certificatesEarned: 0
+      },
+      modules: [],
+      progressMap: {},
+      resources: [],
+      adminSnapshot: null,
+      recommendedAction: {
+        type: 'explore',
+        label: 'Explore your training portal',
+        page: 'dashboard'
+      }
+    };
+  }
+
+  const dailyLearningItems = getDailyLearningForUser_(ss, user);
+  const todayCard = pickDailyLearningCard_(dailyLearningItems);
+  const updates = getUpdatesCached_(ss);
+  const progressSummary = getProgressSummary_(ss, user.email);
+  const quizSummary = getQuizSummary_(ss, user.email);
+  const dashboardStats = getDashboardStatsLight_(ss, user.email, progressSummary, quizSummary);
+  const modules = getModulesCached_(ss);
+  const progressMap = getProgressMap_(ss, user.email);
+
+  const payload = {
+    dailyLearning: {
+      items: dailyLearningItems,
+      todayCard: todayCard,
+      progress: getDailyLearningUserProgress_(ss, user.email),
+      streak: getUserStreak_(ss, user.email),
+      meta: getDailyLearningMeta_(user.email, todayCard),
+      weeklyStatus: getWeeklyDailyStatus_(user.email),
+      leaderboard: getDailyLearningLeaderboard_(ss, user.email, 5)
+    },
+    updates: updates,
+    progressSummary: progressSummary,
+    quizSummary: quizSummary,
+    dashboardStats: dashboardStats,
+    modules: modules,
+    progressMap: progressMap,
+    resources: [],
+    adminSnapshot: access.isAdmin ? getAdminSnapshot_(user.email) : null
+  };
+
+  payload.recommendedAction = getRecommendedAction_({
+    dailyLearning: payload.dailyLearning,
+    progressSummary: payload.progressSummary,
+    updates: payload.updates
+  });
+
+  return payload;
 }
 function getRecommendedAction_(bootstrap) {
   const dailyMeta = bootstrap && bootstrap.dailyLearning ? bootstrap.dailyLearning.meta : null;
@@ -184,20 +358,83 @@ function getRecommendedAction_(bootstrap) {
 }
 
 function buildDailyLearningCompletionResult_(email, cardId) {
+  var ss = getOrCreateSpreadsheet_();
   var card = getDailyLearningCardById_(cardId);
   var meta = getDailyLearningMeta_(email, card);
   var weekly = getWeeklyDailyStatus_(email);
+  var leaderboard = getDailyLearningLeaderboard_(ss, email, 5);
+  var streakInfo = getUserStreak_(ss, email);
 
   return {
     success: true,
     cardId: String(cardId || ''),
     xpEarned: Number(card && card.xp ? card.xp : 0),
-    totalXp: meta.totalXp,
-    todayXp: meta.todayXp,
-    streak: meta.streak,
-    todayCompleted: meta.todayCompleted,
-    weeklyDailyStatus: weekly
+    totalXp: Number(meta.totalXp || 0),
+    todayXp: Number(meta.todayXp || 0),
+    streak: Number(meta.streak || 0),
+    bestStreak: Number(streakInfo.bestStreak || 0),
+    todayCompleted: !!meta.todayCompleted,
+    weeklyDailyStatus: weekly,
+    leaderboard: leaderboard
   };
+}
+function getDailyLearningLeaderboard_(ss, currentEmail, limit) {
+  const streakSh = ss.getSheetByName('UserStreaks');
+  const usersSh = ss.getSheetByName('Users');
+  const maxItems = Number(limit || 5);
+
+  if (!streakSh || streakSh.getLastRow() < 2) return [];
+
+  const userNameMap = {};
+  if (usersSh && usersSh.getLastRow() > 1) {
+    const userValues = usersSh.getDataRange().getValues();
+    for (let i = 1; i < userValues.length; i++) {
+      const email = String(userValues[i][0] || '').trim().toLowerCase();
+      const name = String(userValues[i][1] || '').trim();
+      if (email) {
+        userNameMap[email] = name || email;
+      }
+    }
+  }
+
+  const values = streakSh.getDataRange().getValues();
+  const targetCurrent = String(currentEmail || '').trim().toLowerCase();
+  const rows = [];
+
+  for (let i = 1; i < values.length; i++) {
+    const email = String(values[i][0] || '').trim().toLowerCase();
+    if (!email) continue;
+
+    rows.push({
+      email: email,
+      name: userNameMap[email] || email,
+      currentStreak: Number(values[i][1] || 0),
+      bestStreak: Number(values[i][2] || 0),
+      totalXp: Number(values[i][3] || 0),
+      lastLearnedDate: values[i][4] ? formatDateSafe_(values[i][4]) : '',
+      isCurrentUser: email === targetCurrent
+    });
+  }
+
+  rows.sort(function(a, b) {
+    if (b.totalXp !== a.totalXp) return b.totalXp - a.totalXp;
+    if (b.currentStreak !== a.currentStreak) return b.currentStreak - a.currentStreak;
+    if (b.bestStreak !== a.bestStreak) return b.bestStreak - a.bestStreak;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+
+  return rows.slice(0, maxItems).map(function(row, index) {
+    return {
+      rank: index + 1,
+      email: row.email,
+      name: row.name,
+      currentStreak: row.currentStreak,
+      bestStreak: row.bestStreak,
+      totalXp: row.totalXp,
+      lastLearnedDate: row.lastLearnedDate,
+      isCurrentUser: row.isCurrentUser
+    };
+  });
 }
 function getHeaderMap_(headers) {
   var map = {};
@@ -948,20 +1185,10 @@ values: [
  * SETTINGS
  */
 function getSettings_(ss) {
-  const sh = ss.getSheetByName('Settings');
-  const values = sh.getDataRange().getValues();
-  const map = {};
-
-  for (let i = 1; i < values.length; i++) {
-    const key = String(values[i][0] || '').trim();
-    const value = String(values[i][1] || '').trim();
-    if (key) map[key] = value;
-  }
-
   return {
-    certificateFolderName: map.certificateFolderName || CONFIG.DEFAULT_CERTIFICATE_FOLDER_NAME,
-    chatbotMessage: map.chatbotMessage || 'AI chatbot can be connected later to Drive docs, FAQs, and Sheets-based training knowledge.',
-    welcomeBanner: map.welcomeBanner || 'Welcome to the First Connect Health Training Portal'
+    certificateFolderName: CONFIG.DEFAULT_CERTIFICATE_FOLDER_NAME,
+    chatbotMessage: 'AI chatbot can be connected later to Drive files, FAQs, and sheet-based training knowledge.',
+    welcomeBanner: 'Welcome to the First Connect Health Training Portal'
   };
 }
 
@@ -996,19 +1223,18 @@ function getModules_(ss) {
         id: moduleId,
         title: moduleTitle,
         subtitle: moduleStage,
-        visualFileId: trainingVisualFileId,
+        visualFileId: '',
         lessons: []
       };
     }
-if (!grouped[moduleId].visualFileId && trainingVisualFileId) {
-  grouped[moduleId].visualFileId = trainingVisualFileId;
-}
+
     grouped[moduleId].lessons.push({
       order: lessonOrder,
       name: lessonName,
       type: lessonType || 'Lesson',
       link: lessonLink,
-      videoEmbedUrl: videoEmbedUrl
+      videoEmbedUrl: videoEmbedUrl,
+      trainingVisualFileId: trainingVisualFileId
     });
   }
 
@@ -1016,6 +1242,15 @@ if (!grouped[moduleId].visualFileId && trainingVisualFileId) {
     grouped[key].lessons.sort(function(a, b) {
       return a.order - b.order;
     });
+
+    const firstVisualLesson = grouped[key].lessons.find(function(lesson) {
+      return String(lesson.trainingVisualFileId || '').trim();
+    });
+
+    grouped[key].visualFileId = firstVisualLesson
+      ? String(firstVisualLesson.trainingVisualFileId || '').trim()
+      : '';
+
     return grouped[key];
   });
 
@@ -1025,7 +1260,71 @@ if (!grouped[moduleId].visualFileId && trainingVisualFileId) {
 
   return modules;
 }
+function getDefaultTrainingVisualForModule(module) {
+  if (!module || !Array.isArray(module.lessons)) return '';
 
+  const lessonWithVisual = module.lessons.find(function(lesson) {
+    return String(lesson.trainingVisualFileId || '').trim();
+  });
+
+  return lessonWithVisual ? String(lessonWithVisual.trainingVisualFileId || '').trim() : '';
+}
+
+function setActiveTrainingVisual(moduleId, visualFileId, lessonName) {
+  const targetModuleId = String(moduleId || '').trim();
+  const targetVisualFileId = String(visualFileId || '').trim();
+
+  if (!targetModuleId) return;
+
+  state.trainingActiveVisuals = state.trainingActiveVisuals || {};
+
+  if (!targetVisualFileId) {
+    return;
+  }
+
+  state.trainingActiveVisuals[targetModuleId] = {
+    visualFileId: targetVisualFileId,
+    lessonName: String(lessonName || '').trim()
+  };
+
+  const img = document.getElementById('trainingVisualImg_' + targetModuleId);
+  const empty = document.getElementById('trainingVisualEmpty_' + targetModuleId);
+  const title = document.getElementById('trainingVisualTitle_' + targetModuleId);
+
+  if (img) {
+    img.src = getDriveImageUrlFromFileId(targetVisualFileId, 1600);
+    img.style.display = 'block';
+  }
+
+  if (empty) {
+    empty.style.display = 'none';
+  }
+
+  if (title) {
+    title.textContent = (lessonName ? lessonName + ' Visual' : 'Training Visual');
+  }
+}
+function getSmartSuggestions_(question, match) {
+  const suggestions = [];
+
+  if (match && match.mainQuestion) {
+    suggestions.push('Explain this step by step');
+    suggestions.push('Show related module');
+    suggestions.push('Give real example');
+  }
+
+  if (question.includes('module')) {
+    suggestions.push('Open this module');
+    suggestions.push('Show assessment');
+  }
+
+  if (question.includes('leave') || question.includes('attendance')) {
+    suggestions.push('Who is HR contact?');
+    suggestions.push('Where to raise request?');
+  }
+
+  return suggestions.slice(0, 3);
+}
 function getNumberFromModuleId_(value) {
   const n = Number(String(value || '').replace(/[^\d]/g, ''));
   return isNaN(n) ? 9999 : n;
@@ -1035,42 +1334,39 @@ function getNumberFromModuleId_(value) {
  * FAQ / ANNOUNCEMENTS
  */
 function getFaq_(ss) {
-  const sh = ss.getSheetByName('FAQ');
-  const values = sh.getDataRange().getValues();
-  const items = [];
-
-  for (let i = 1; i < values.length; i++) {
-    const enabled = String(values[i][0] || '').trim().toUpperCase();
-    if (enabled !== 'Y') continue;
-
-    items.push({
-      question: String(values[i][1] || '').trim(),
-      answer: String(values[i][2] || '').trim()
-    });
-  }
-
-  return items;
+  return [];
 }
 function getUpdates_(ss) {
   const sh = ss.getSheetByName('Updates');
   const values = sh.getDataRange().getValues();
+  if (values.length < 2) return [];
+
+  const headers = values[0];
+  const index = getHeaderMap_(headers);
   const items = [];
 
   for (let i = 1; i < values.length; i++) {
-    const enabled = String(values[i][0] || '').trim().toUpperCase();
+    const row = values[i];
+    const enabled = String(row[index['Enabled']] || '').trim().toUpperCase();
+    const updateCategory = String(row[index['Update Category']] || '').trim();
+
     if (enabled !== 'Y') continue;
+    if (updateCategory === 'AdminLog') continue;
 
     items.push({
       rowNumber: i + 1,
-      title: String(values[i][1] || '').trim(),
-      message: String(values[i][2] || '').trim(),
-      type: String(values[i][3] || 'info').trim() || 'info'
+      title: String(row[index['Title']] || '').trim(),
+      message: String(row[index['Message']] || '').trim(),
+      type: String(row[index['Type']] || 'info').trim() || 'info',
+      updatedAt: row[index['Updated At']] ? formatDateSafe_(row[index['Updated At']]) : '',
+      updatedBy: String(row[index['Updated By']] || '').trim(),
+      updateTopic: String(row[index['Update Topic']] || '').trim(),
+      updateCategory: updateCategory
     });
   }
 
   return items;
 }
-
 /**
  * DRIVE RESOURCES
  */
@@ -1147,7 +1443,23 @@ function getProgressMap_(ss, email) {
 
   return map;
 }
+function getSmartSuggestions_(question) {
+  const q = String(question || '').toLowerCase();
 
+  if (q.includes('leave')) {
+    return ['Who is HR contact?', 'How to apply leave step by step?'];
+  }
+
+  if (q.includes('attendance')) {
+    return ['Who handles attendance issues?', 'How to fix attendance?'];
+  }
+
+  if (q.includes('module')) {
+    return ['Open this module', 'Show assessment'];
+  }
+
+  return ['Ask another question', 'Show training modules'];
+}
 function getProgressSummary_(ss, email) {
   const modules = getModules_(ss);
   const progressMap = getProgressMap_(ss, email);
@@ -1277,6 +1589,9 @@ function getQuizQuestionsByModule(moduleId) {
   const sh = ss.getSheetByName('Quizzes');
   const data = sh.getDataRange().getValues();
   const targetModuleId = String(moduleId || '').trim();
+  // Each module can store 40+ questions in Quizzes.
+  // For every attempt, only 25 random enabled questions are served.
+  const QUIZ_PICK_COUNT = 25;
 
   if (!targetModuleId) return [];
 
@@ -1293,7 +1608,9 @@ function getQuizQuestionsByModule(moduleId) {
     rows[j] = temp;
   }
 
-  return rows.map(function(r) {
+  const selectedRows = rows.slice(0, QUIZ_PICK_COUNT);
+  if (!selectedRows.length) return [];
+  return selectedRows.map(function(r) {
     return {
       moduleId: String(r[1] || '').trim(),
       questionId: String(r[2] || '').trim(),
@@ -1364,7 +1681,9 @@ function submitQuiz(payload) {
       explanation: explanation
     });
   }
-
+details.sort(function(a, b) {
+  return questionIds.indexOf(a.questionId) - questionIds.indexOf(b.questionId);
+});
   if (total === 0) throw new Error('No quiz found for this module.');
   if (total !== questionIds.length) throw new Error('Submitted quiz set does not match the loaded questions.');
 
@@ -1444,136 +1763,349 @@ function generateCertificateForModule_(ss, email, moduleId) {
   const folderName = getSettings_(ss).certificateFolderName || CONFIG.DEFAULT_CERTIFICATE_FOLDER_NAME;
   const folder = getOrCreateFolderByName_(folderName);
 
-  // ✅ Get real name from Users sheet
   let userName = '';
   const users = getUsers_(ss);
-  const target = String(email || '').trim().toLowerCase();
+  const targetEmail = String(email || '').trim().toLowerCase();
 
   for (let i = 0; i < users.length; i++) {
-    if (String(users[i].email || '').trim().toLowerCase() === target) {
-      userName = users[i].name;
+    if (String(users[i].email || '').trim().toLowerCase() === targetEmail) {
+      userName = String(users[i].name || '').trim();
       break;
     }
   }
 
-  // fallback
   if (!userName) {
     userName = formatNameFromEmail_(email);
   }
 
   const module = findModuleById_(ss, moduleId);
-  const moduleTitle = module ? module.title : moduleId;
+  const moduleTitle = module ? String(module.title || '').trim() : String(moduleId || '').trim();
 
-  const html = buildCertificateHtml_(userName, moduleTitle);
-  const blob = Utilities.newBlob(html, 'text/html', 'certificate.html');
+  const issuedAt = new Date();
+  const certificateId = buildCertificateId_(moduleId, email, issuedAt);
 
-  const file = folder.createFile(blob)
-    .setName('Certificate - ' + userName + ' - ' + moduleTitle + '.html');
+  const html = buildCertificateHtml_(userName, moduleTitle, certificateId, issuedAt);
+  const pdfBlob = HtmlService
+    .createHtmlOutput(html)
+    .getBlob()
+    .getAs(MimeType.PDF);
 
+  const pdfFileName = sanitizeFileName_(
+    'Certificate - ' + userName + ' - ' + moduleTitle + '.pdf'
+  );
+
+  pdfBlob.setName(pdfFileName);
+
+  const file = folder.createFile(pdfBlob);
   const certSh = ss.getSheetByName('Certificates');
+  if (!certSh) throw new Error('Certificates sheet not found.');
+
+  ensureCertificatesSheetHeaders_(certSh);
+
   certSh.appendRow([
     email,
     moduleId,
     file.getName(),
     file.getUrl(),
-    new Date()
+    issuedAt,
+    file.getId(),
+    certificateId
   ]);
 
   return {
     name: file.getName(),
     url: file.getUrl(),
-    moduleId: moduleId,
-    moduleTitle: moduleTitle
+    moduleId: String(moduleId || '').trim(),
+    moduleTitle: moduleTitle,
+    issuedAt: formatDateSafe_(issuedAt),
+    fileId: file.getId(),
+    certificateId: certificateId
   };
 }
+function buildCertificateHtml_(userName, moduleTitle, certificateId, issuedAt) {
+  const safeUserName = escapeHtmlServer_(String(userName || '').trim());
+  const safeModuleTitle = escapeHtmlServer_(String(moduleTitle || '').trim());
+  const safeCertificateId = escapeHtmlServer_(String(certificateId || '').trim());
 
-function buildCertificateHtml_(userName, moduleTitle) {
-  const issuedDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd MMM yyyy');
+  const issuedDate = Utilities.formatDate(
+    issuedAt || new Date(),
+    Session.getScriptTimeZone(),
+    'MMMM d, yyyy'
+  );
+  const safeIssuedDate = escapeHtmlServer_(issuedDate);
+
   const logoUrl = 'https://drive.google.com/uc?export=view&id=1qGHveKbBlPXHo44lx_KwngmIYhZHWjPp';
 
   return [
     '<!DOCTYPE html>',
-    '<html><head><meta charset="utf-8"><title>Certificate</title>',
+    '<html>',
+    '<head>',
+    '<meta charset="utf-8">',
+    '<title>Certificate of Completion</title>',
     '<style>',
-    '@page{size:A4 landscape;margin:0;}',
-    'html,body{margin:0;padding:0;background:#eef3f8;font-family:Arial,sans-serif;color:#1d2c3c;}',
-    'body{padding:18px;box-sizing:border-box;}',
-    '.sheet{width:1123px;min-height:794px;margin:0 auto;background:linear-gradient(135deg,#fafbfd 0%,#f3f6fa 38%,#eef2f7 100%);position:relative;overflow:hidden;}',
-    '.sheet:before{content:"";position:absolute;left:-120px;top:-80px;width:420px;height:420px;background:radial-gradient(circle at center, rgba(34,76,124,0.08) 0%, rgba(34,76,124,0.03) 45%, rgba(34,76,124,0) 72%);border-radius:50%;}',
-    '.sheet:after{content:"";position:absolute;right:-180px;bottom:-180px;width:620px;height:620px;background:radial-gradient(circle at center, rgba(34,76,124,0.08) 0%, rgba(34,76,124,0.03) 42%, rgba(34,76,124,0) 72%);border-radius:50%;}',
-    '.frame{position:absolute;top:24px;left:24px;right:24px;bottom:24px;border:6px solid #304b73;border-radius:18px;box-sizing:border-box;}',
-    '.frame-inner{position:absolute;top:12px;left:12px;right:12px;bottom:12px;border:2px solid #304b73;border-radius:12px;box-sizing:border-box;}',
-    '.corner{position:absolute;width:54px;height:54px;border:4px solid #304b73;border-radius:0 0 28px 0;background:transparent;}',
-    '.corner.tl{top:-6px;left:-6px;border-right:none;border-bottom:none;border-top-left-radius:18px;border-bottom-right-radius:0;}',
-    '.corner.tr{top:-6px;right:-6px;border-left:none;border-bottom:none;border-top-right-radius:18px;border-bottom-right-radius:0;}',
-    '.corner.bl{bottom:-6px;left:-6px;border-right:none;border-top:none;border-bottom-left-radius:18px;border-bottom-right-radius:0;}',
-    '.corner.br{bottom:-6px;right:-6px;border-left:none;border-top:none;border-bottom-right-radius:18px;border-bottom-left-radius:0;}',
-    '.content{position:relative;z-index:2;padding:74px 92px 56px;text-align:center;}',
-    '.logo-wrap{position:absolute;top:46px;right:68px;text-align:right;z-index:3;max-width:220px;}',
-    '.logo{max-width:170px;max-height:64px;object-fit:contain;display:block;margin-left:auto;}',
-    '.logo-name{margin-top:8px;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#2f5f98;font-weight:700;}',
-    '.title{font-family:Georgia,"Times New Roman",serif;font-size:78px;line-height:1.02;font-weight:400;color:#25385a;margin:26px 0 10px;}',
-    '.subtitle{font-size:24px;letter-spacing:3px;text-transform:uppercase;color:#111;margin:0 0 42px;}',
-    '.line1{font-size:22px;color:#2a2a2a;margin:0 0 14px;}',
-    '.name{font-family:"Times New Roman",Georgia,serif;font-size:58px;line-height:1.15;font-style:italic;color:#222;margin:0 0 26px;}',
-    '.rule{width:64%;height:1px;background:#555;margin:0 auto 36px;}',
-    '.line2{font-size:18px;letter-spacing:4px;color:#444;font-style:italic;margin:0 0 18px;text-transform:none;}',
-    '.module{max-width:760px;margin:0 auto;font-size:34px;line-height:1.25;color:#1c4f89;font-weight:700;}',
-    '.meta-row{margin-top:72px;display:flex;justify-content:space-between;align-items:flex-end;gap:36px;}',
-    '.sign-block{flex:1;text-align:center;}',
-    '.sign-line{width:78%;height:1px;background:#666;margin:0 auto 14px;}',
-    '.sign-name{font-size:16px;letter-spacing:3px;text-transform:uppercase;color:#333;}',
-    '.sign-role{font-size:14px;letter-spacing:3px;text-transform:lowercase;color:#555;margin-top:4px;}',
-    '.seal{width:118px;height:118px;border-radius:50%;margin:0 auto;background:radial-gradient(circle at 35% 30%, #f8e7a1 0%, #e6c565 45%, #c99b34 70%, #b98522 100%);border:7px solid #d7b25a;box-shadow:0 0 0 5px #2c446b, 0 10px 20px rgba(0,0,0,0.15);position:relative;}',
-    '.seal:before{content:"";position:absolute;left:50%;transform:translateX(-50%);bottom:-38px;width:0;height:0;border-left:22px solid transparent;border-right:22px solid transparent;border-top:42px solid #243f6a;}',
-    '.seal:after{content:"";position:absolute;left:50%;transform:translateX(-50%) translateX(34px);bottom:-38px;width:0;height:0;border-left:22px solid transparent;border-right:22px solid transparent;border-top:42px solid #243f6a;}',
-    '.seal-center{position:absolute;inset:18px;border-radius:50%;border:3px solid rgba(255,255,255,0.55);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;letter-spacing:1px;color:#5a3c06;text-transform:uppercase;text-align:center;line-height:1.25;}',
-    '.issued{margin-top:40px;font-size:16px;color:#4c5d70;}',
-    '.issued strong{color:#243f6a;}',
-    '@media print{body{padding:0;background:#fff;}.sheet{margin:0;}.frame{top:10px;left:10px;right:10px;bottom:10px;}}',
-    '</style></head><body>',
-    '<div class="sheet">',
-    '<div class="frame">',
-    '<div class="frame-inner"></div>',
-    '<div class="corner tl"></div>',
-    '<div class="corner tr"></div>',
-    '<div class="corner bl"></div>',
-    '<div class="corner br"></div>',
-    '</div>',
-    '<div class="logo-wrap">',
+    '@page { size: A4 landscape; margin: 0; }',
+    'html, body { margin:0; padding:0; width:100%; height:100%; background:#ffffff; font-family:Arial, Helvetica, sans-serif; }',
+    'body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }',
+
+    '.page {',
+    '  position: relative;',
+    '  width: 1123px;',
+    '  height: 794px;',
+    '  margin: 0 auto;',
+    '  background: #ffffff;',
+    '  overflow: hidden;',
+    '  color: #1f1f1f;',
+    '}',
+
+    '.top-right-arc-1, .top-right-arc-2, .top-right-arc-3, .top-right-arc-4, .top-right-arc-5,',
+    '.mid-left-wave-1, .mid-left-wave-2, .mid-left-wave-3, .mid-left-wave-4, .mid-left-wave-5 {',
+    '  position: absolute;',
+    '  border-top: 2px solid #b9d2ee;',
+    '  border-radius: 50%;',
+    '  opacity: 1;',
+    '}',
+
+    '.top-right-arc-1 { top: -115px; right: -40px; width: 420px; height: 220px; transform: rotate(12deg); }',
+    '.top-right-arc-2 { top: -104px; right: -26px; width: 400px; height: 210px; transform: rotate(12deg); }',
+    '.top-right-arc-3 { top: -93px; right: -12px; width: 380px; height: 200px; transform: rotate(12deg); }',
+    '.top-right-arc-4 { top: -82px; right: 2px; width: 360px; height: 190px; transform: rotate(12deg); }',
+    '.top-right-arc-5 { top: -71px; right: 16px; width: 340px; height: 180px; transform: rotate(12deg); }',
+
+    '.mid-left-wave-1 { top: 150px; left: -120px; width: 420px; height: 150px; transform: rotate(12deg); }',
+    '.mid-left-wave-2 { top: 162px; left: -102px; width: 405px; height: 145px; transform: rotate(12deg); }',
+    '.mid-left-wave-3 { top: 174px; left: -84px; width: 390px; height: 140px; transform: rotate(12deg); }',
+    '.mid-left-wave-4 { top: 186px; left: -66px; width: 375px; height: 135px; transform: rotate(12deg); }',
+    '.mid-left-wave-5 { top: 198px; left: -48px; width: 360px; height: 130px; transform: rotate(12deg); }',
+
+    '.bottom-dark {',
+    '  position:absolute;',
+    '  left:-40px;',
+    '  bottom:-90px;',
+    '  width:520px;',
+    '  height:210px;',
+    '  background:#0f2e72;',
+    '  border-top-left-radius: 0;',
+    '  border-top-right-radius: 260px 150px;',
+    '}',
+
+    '.bottom-light {',
+    '  position:absolute;',
+    '  left:300px;',
+    '  bottom:-58px;',
+    '  width:360px;',
+    '  height:120px;',
+    '  background:#6b93d8;',
+    '  border-top-left-radius: 220px 110px;',
+    '  border-top-right-radius: 220px 110px;',
+    '}',
+
+    '.bottom-mid {',
+    '  position:absolute;',
+    '  left:345px;',
+    '  bottom:-76px;',
+    '  width:420px;',
+    '  height:145px;',
+    '  background:#0f4da3;',
+    '  border-top-left-radius: 260px 130px;',
+    '  border-top-right-radius: 260px 130px;',
+    '}',
+
+    '.header-left {',
+    '  position:absolute;',
+    '  top:28px;',
+    '  left:26px;',
+    '  width:180px;',
+    '  text-align:left;',
+    '}',
+
+    '.logo {',
+    '  width:140px;',
+    '  height:auto;',
+    '  display:block;',
+    '}',
+
+    '.top-center {',
+    '  position:absolute;',
+    '  top:55px;',
+    '  left:0;',
+    '  right:0;',
+    '  text-align:center;',
+    '}',
+
+    '.company-name {',
+    '  margin:0;',
+    '  color:#0c4a9a;',
+    '  font-size:19px;',
+    '  font-weight:800;',
+    '  letter-spacing:0.5px;',
+    '}',
+
+    '.title {',
+    '  margin:28px 0 0;',
+    '  color:#0b57c2;',
+    '  font-size:72px;',
+    '  line-height:0.95;',
+    '  font-weight:900;',
+    '  letter-spacing:1px;',
+    '}',
+
+    '.subtitle {',
+    '  margin:6px 0 0;',
+    '  color:#0d4ea4;',
+    '  font-size:28px;',
+    '  font-weight:700;',
+    '  letter-spacing:8px;',
+    '}',
+
+    '.badge-wrap {',
+    '  position:absolute;',
+    '  top:104px;',
+    '  right:92px;',
+    '  width:110px;',
+    '  height:140px;',
+    '}',
+
+    '.badge-circle {',
+    '  position:absolute;',
+    '  top:0;',
+    '  left:18px;',
+    '  width:72px;',
+    '  height:72px;',
+    '  border-radius:50%;',
+    '  background:#f3c93c;',
+    '  box-shadow: inset 0 0 0 5px #fff3b5, inset 0 0 0 10px #f3c93c;',
+    '}',
+
+    '.badge-ribbon-left, .badge-ribbon-right {',
+    '  position:absolute;',
+    '  top:62px;',
+    '  width:0;',
+    '  height:0;',
+    '  border-left:10px solid transparent;',
+    '  border-right:10px solid transparent;',
+    '  border-top:44px solid #0d4ea4;',
+    '}',
+    '.badge-ribbon-left { left:30px; transform: rotate(8deg); }',
+    '.badge-ribbon-right { left:54px; transform: rotate(-8deg); }',
+
+    '.body {',
+    '  position:absolute;',
+    '  left:0;',
+    '  right:0;',
+    '  top:210px;',
+    '  text-align:center;',
+    '  padding:0 90px;',
+    '  box-sizing:border-box;',
+    '}',
+
+    '.intro {',
+    '  margin:0;',
+    '  font-size:23px;',
+    '  color:#2d2d2d;',
+    '  font-weight:400;',
+    '}',
+
+    '.name {',
+    '  margin:24px 0 8px;',
+    '  color:#0b57c2;',
+    '  font-size:68px;',
+    '  line-height:1;',
+    '  font-weight:400;',
+    '  font-family:"Brush Script MT","Lucida Handwriting","Segoe Script",cursive;',
+    '}',
+
+    '.name-line {',
+    '  width:440px;',
+    '  max-width:100%;',
+    '  margin:0 auto 12px;',
+    '  border-top:2px solid #8b8b8b;',
+    '}',
+
+    '.completion-line {',
+    '  margin:0;',
+    '  font-size:18px;',
+    '  color:#262626;',
+    '}',
+
+    '.module-line {',
+    '  margin:12px 0 0;',
+    '  font-size:20px;',
+    '  color:#262626;',
+    '  font-weight:400;',
+    '}',
+
+    '.module-name {',
+    '  color:#0b57c2;',
+    '  font-weight:800;',
+    '}',
+
+    '.date-line {',
+    '  margin:4px 0 0;',
+    '  font-size:18px;',
+    '  color:#262626;',
+    '}',
+
+    '.footer-id {',
+    '  position:absolute;',
+    '  left:42px;',
+    '  bottom:26px;',
+    '  font-size:12px;',
+    '  color:#5f6d7d;',
+    '}',
+
+    '</style>',
+    '</head>',
+    '<body>',
+    '<div class="page">',
+
+    '<div class="top-right-arc-1"></div>',
+    '<div class="top-right-arc-2"></div>',
+    '<div class="top-right-arc-3"></div>',
+    '<div class="top-right-arc-4"></div>',
+    '<div class="top-right-arc-5"></div>',
+
+    '<div class="mid-left-wave-1"></div>',
+    '<div class="mid-left-wave-2"></div>',
+    '<div class="mid-left-wave-3"></div>',
+    '<div class="mid-left-wave-4"></div>',
+    '<div class="mid-left-wave-5"></div>',
+
+    '<div class="bottom-dark"></div>',
+    '<div class="bottom-light"></div>',
+    '<div class="bottom-mid"></div>',
+
+    '<div class="header-left">',
     '<img class="logo" src="' + logoUrl + '" alt="First Connect Health Logo">',
-    '<div class="logo-name">First Connect Health</div>',
     '</div>',
-    '<div class="content">',
-    '<div class="title">Certificate</div>',
-    '<div class="subtitle">of Completion</div>',
-    '<div class="line1">This certificate is proudly presented to</div>',
-    '<div class="name">' + escapeHtmlServer_(userName) + '</div>',
-    '<div class="rule"></div>',
-    '<div class="line2">for successfully completing the training module</div>',
-    '<div class="module">' + escapeHtmlServer_(moduleTitle) + '</div>',
-    '<div class="issued">Issued on <strong>' + escapeHtmlServer_(issuedDate) + '</strong></div>',
-    '<div class="meta-row">',
-    '<div class="sign-block">',
-    '<div class="sign-line"></div>',
-    '<div class="sign-name">Training Team</div>',
-    '<div class="sign-role">First Connect Health</div>',
+
+    '<div class="top-center">',
+    '<div class="company-name">FIRST CONNECT HEALTH</div>',
+    '<div class="title">CERTIFICATE</div>',
+    '<div class="subtitle">OF COMPLETION</div>',
     '</div>',
-    '<div class="sign-block" style="flex:0 0 180px;">',
-    '<div class="seal"><div class="seal-center">Certified<br>Learning</div></div>',
+
+    '<div class="badge-wrap">',
+    '<div class="badge-circle"></div>',
+    '<div class="badge-ribbon-left"></div>',
+    '<div class="badge-ribbon-right"></div>',
     '</div>',
-    '<div class="sign-block">',
-    '<div class="sign-line"></div>',
-    '<div class="sign-name">Organization</div>',
-    '<div class="sign-role">Training Portal</div>',
+
+    '<div class="body">',
+    '<p class="intro">This certificate is proudly presented to</p>',
+    '<div class="name">' + safeUserName + '</div>',
+    '<div class="name-line"></div>',
+    '<p class="completion-line">for successfully completing the training module</p>',
+    '<p class="module-line"><span class="module-name">' + safeModuleTitle + '</span></p>',
+    '<p class="date-line">on ' + safeIssuedDate + '</p>',
     '</div>',
+
+    '<div class="footer-id">Certificate ID: ' + safeCertificateId + '</div>',
+
     '</div>',
-    '</div>',
-    '</div>',
-    '</body></html>'
+    '</body>',
+    '</html>'
   ].join('');
 }
-
 function getCertificatesForUser() {
   const ctx = requireEnabledPortalUser_();
   const ss = ctx.ss;
@@ -1691,74 +2223,7 @@ function getAuthBootstrap_(ss, user) {
     reverifyMinutes: 60
   };
 }
-function sendLoginOtp() {
-  const ctx = requireEnabledPortalUser_();
-  const email = String(ctx.user.email || '').trim().toLowerCase();
-  const cache = CacheService.getScriptCache();
-  const lock = LockService.getScriptLock();
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
-  const preferredAlias = String(CONFIG.NO_REPLY_EMAIL || '').trim().toLowerCase();
 
-  if (!email || email === 'not available') {
-    throw new Error('User email is not available.');
-  }
-
-  lock.waitLock(3000);
-  try {
-    const cooldownKey = buildPortalOtpCooldownCacheKey_(email);
-    const cooldownActive = cache.get(cooldownKey);
-    if (cooldownActive) {
-      return {
-        success: false,
-        message: 'Please wait 60 seconds before requesting another OTP.'
-      };
-    }
-
-    cache.put(buildPortalOtpCacheKey_(email), otp, Number(CONFIG.OTP_EXPIRY_SECONDS || 300));
-    cache.put(buildPortalOtpAttemptsCacheKey_(email), '0', Number(CONFIG.OTP_EXPIRY_SECONDS || 300));
-    cache.put(cooldownKey, 'Y', Number(CONFIG.OTP_SEND_COOLDOWN_SECONDS || 60));
-    cache.remove(buildPortalOtpVerifiedCacheKey_(email));
-  } finally {
-    lock.releaseLock();
-  }
-
-  const subject = 'Training Portal OTP';
-  const body = [
-    'Hello ' + (ctx.user.name || 'User') + ',',
-    '',
-    'Your OTP is: ' + otp,
-    '',
-    'This OTP will expire in 5 minutes.',
-    'If you did not request this, please ignore this email.',
-    '',
-    'Training Portal'
-  ].join('\n');
-
-  const aliases = GmailApp.getAliases().map(function(alias) {
-    return String(alias || '').trim().toLowerCase();
-  });
-
-  if (aliases.indexOf(preferredAlias) > -1) {
-    GmailApp.sendEmail(email, subject, body, {
-      from: preferredAlias,
-      name: 'Training Portal',
-      replyTo: CONFIG.SUPPORT_EMAIL
-    });
-  } else {
-    MailApp.sendEmail({
-      to: email,
-      subject: subject,
-      body: body,
-      name: 'Training Portal',
-      noReply: true
-    });
-  }
-
-  return {
-    success: true,
-    message: 'OTP sent to your enabled email address.'
-  };
-}
 function verifyLoginOtp(otp) {
   const ctx = requireEnabledPortalUser_();
   const email = String(ctx.user.email || '').trim().toLowerCase();
@@ -1831,51 +2296,124 @@ function updateUserActivity() {
     updatedAt: new Date()
   };
 }
-
 function getCertificatesForUser_(ss, email) {
   const sh = ss.getSheetByName('Certificates');
+  if (!sh) return [];
+
+  ensureCertificatesSheetHeaders_(sh);
+
   const values = sh.getDataRange().getValues();
+  if (values.length < 2) return [];
+
+  const headers = values[0];
+  const index = getHeaderMap_(headers);
   const target = String(email || '').trim().toLowerCase();
   const items = [];
 
   for (let i = 1; i < values.length; i++) {
-    const rowEmail = String(values[i][0] || '').trim().toLowerCase();
+    const row = values[i];
+    const rowEmail = String(row[index['Email']] || '').trim().toLowerCase();
     if (rowEmail !== target) continue;
 
+    const moduleId = String(row[index['Module ID']] || '').trim();
+
     items.push({
-      moduleId: String(values[i][1] || '').trim(),
-      name: String(values[i][2] || '').trim(),
-      url: String(values[i][3] || '').trim(),
-      issuedAt: formatDateSafe_(values[i][4])
+      moduleId: moduleId,
+      moduleTitle: (findModuleById_(ss, moduleId) || {}).title || moduleId,
+      name: String(row[index['Certificate Name']] || '').trim(),
+      url: String(row[index['File URL']] || '').trim(),
+      issuedAt: formatDateSafe_(row[index['Issued At']]),
+      fileId: index['File ID'] !== undefined ? String(row[index['File ID']] || '').trim() : '',
+      certificateId: index['Certificate ID'] !== undefined ? String(row[index['Certificate ID']] || '').trim() : ''
     });
   }
 
   return items;
 }
-
 function getCertificateByModule_(ss, email, moduleId) {
   const sh = ss.getSheetByName('Certificates');
+  if (!sh) return null;
+
+  ensureCertificatesSheetHeaders_(sh);
+
   const values = sh.getDataRange().getValues();
+  if (values.length < 2) return null;
+
+  const headers = values[0];
+  const index = getHeaderMap_(headers);
   const targetEmail = String(email || '').trim().toLowerCase();
   const targetModuleId = String(moduleId || '').trim();
 
   for (let i = 1; i < values.length; i++) {
-    const rowEmail = String(values[i][0] || '').trim().toLowerCase();
-    const rowModuleId = String(values[i][1] || '').trim();
+    const row = values[i];
+    const rowEmail = String(row[index['Email']] || '').trim().toLowerCase();
+    const rowModuleId = String(row[index['Module ID']] || '').trim();
+
     if (rowEmail === targetEmail && rowModuleId === targetModuleId) {
       return {
         moduleId: rowModuleId,
-        name: String(values[i][2] || '').trim(),
-        url: String(values[i][3] || '').trim(),
-        issuedAt: formatDateSafe_(values[i][4]),
-        moduleTitle: (findModuleById_(ss, rowModuleId) || {}).title || rowModuleId
+        moduleTitle: (findModuleById_(ss, rowModuleId) || {}).title || rowModuleId,
+        name: String(row[index['Certificate Name']] || '').trim(),
+        url: String(row[index['File URL']] || '').trim(),
+        issuedAt: formatDateSafe_(row[index['Issued At']]),
+        fileId: index['File ID'] !== undefined ? String(row[index['File ID']] || '').trim() : '',
+        certificateId: index['Certificate ID'] !== undefined ? String(row[index['Certificate ID']] || '').trim() : ''
       };
     }
   }
 
   return null;
 }
+function ensureCertificatesSheetHeaders_(sheet) {
+  const requiredHeaders = [
+    'Email',
+    'Module ID',
+    'Certificate Name',
+    'File URL',
+    'Issued At',
+    'File ID',
+    'Certificate ID'
+  ];
 
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(requiredHeaders);
+    return;
+  }
+
+  const currentLastColumn = Math.max(sheet.getLastColumn(), requiredHeaders.length);
+  const existingHeaders = sheet.getRange(1, 1, 1, currentLastColumn).getValues()[0];
+  const normalizedExisting = existingHeaders.map(function(value) {
+    return String(value || '').trim();
+  });
+
+  let nextColumn = normalizedExisting.length + 1;
+
+  for (let i = 0; i < requiredHeaders.length; i++) {
+    if (normalizedExisting.indexOf(requiredHeaders[i]) === -1) {
+      sheet.getRange(1, nextColumn).setValue(requiredHeaders[i]);
+      normalizedExisting.push(requiredHeaders[i]);
+      nextColumn++;
+    }
+  }
+}
+function buildCertificateId_(moduleId, email, issuedAt) {
+  const baseEmail = String(email || '').trim().toLowerCase().split('@')[0] || 'user';
+  const cleanEmail = baseEmail.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 6) || 'USER';
+  const cleanModule = String(moduleId || '').trim().replace(/[^a-z0-9]/gi, '').toUpperCase() || 'MODULE';
+  const datePart = Utilities.formatDate(
+    issuedAt || new Date(),
+    Session.getScriptTimeZone(),
+    'yyyyMMdd'
+  );
+
+  return 'FCH-' + cleanModule + '-' + cleanEmail + '-' + datePart;
+}
+function sanitizeFileName_(value) {
+  return String(value || '')
+    .replace(/[\\\/:\*\?"<>\|#%&\{\}\$!'@`=+]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 /**
  * ADMIN
  */
@@ -1951,6 +2489,8 @@ function addUpdate(payload) {
   const title = String(payload.title || '').trim();
   const message = String(payload.message || '').trim();
   const type = String(payload.type || 'info').trim().toLowerCase();
+  const updateTopic = String(payload.updateTopic || 'Update').trim();
+  const updateCategory = String(payload.updateCategory || 'Portal').trim();
 
   if (!title) throw new Error('Title is required.');
   if (!message) throw new Error('Message is required.');
@@ -1960,11 +2500,19 @@ function addUpdate(payload) {
 
   const ss = getOrCreateSpreadsheet_();
   const sh = ss.getSheetByName('Updates');
-  sh.appendRow(['Y', title, message, type]);
-  logAdminAction_(ss, user.email, 'ADD_UPDATE', {
-    title: title,
-    type: type
-  });
+  const now = new Date();
+  const updatedBy = String(user.name || user.email || '').trim();
+
+  sh.appendRow([
+    'Y',
+    title,
+    message,
+    type,
+    now,
+    updatedBy,
+    updateTopic,
+    updateCategory
+  ]);
 
   return getUpdates_(ss);
 }
@@ -2059,19 +2607,106 @@ function findModuleById_(ss, moduleId) {
   return null;
 }
 
+function addDailyLearningItem(payload) { 
+  const user = getUserInfo_();
+  const access = evaluateUserAccess_(user);
+  if (!access.isAdmin) throw new Error('Only admins can add daily learning items.');
 
+  const type = String(payload.type || 'Tip').trim();
+  const title = String(payload.title || '').trim();
+  const content = String(payload.content || '').trim();
+  const subtext = String(payload.subtext || '').trim();
+  const tag = String(payload.tag || '').trim();
+  const optionA = String(payload.optionA || '').trim();
+  const optionB = String(payload.optionB || '').trim();
+  const optionC = String(payload.optionC || '').trim();
+  const optionD = String(payload.optionD || '').trim();
+  const correctOption = String(payload.correctOption || '').trim().toUpperCase();
+  const audience = String(payload.audience || 'All').trim() || 'All';
+  const xp = Number(payload.xp || 5);
+  let cardId = String(payload.cardId || '').trim();
+
+  if (!title) throw new Error('Title is required.');
+  if (!content) throw new Error('Content is required.');
+
+  const validTypes = ['Tip', 'Vocabulary', 'Quote', 'Quiz'];
+  if (validTypes.indexOf(type) === -1) throw new Error('Invalid daily learning type.');
+
+  if (type === 'Quiz') {
+    if (!optionA || !optionB || !optionC || !optionD) {
+      throw new Error('All 4 quiz options are required for Quiz type.');
+    }
+    if (['A', 'B', 'C', 'D'].indexOf(correctOption) === -1) {
+      throw new Error('Correct option must be A, B, C, or D for Quiz type.');
+    }
+  }
+
+  const ss = getOrCreateSpreadsheet_();
+  const dailySh = ss.getSheetByName('DailyLearning');
+  if (!dailySh) throw new Error('DailyLearning sheet not found.');
+
+  const values = dailySh.getDataRange().getValues();
+  let maxDisplayOrder = 0;
+
+  for (let i = 1; i < values.length; i++) {
+    const rowOrder = Number(values[i][11] || 0);
+    if (rowOrder > maxDisplayOrder) maxDisplayOrder = rowOrder;
+  }
+
+  const nextDisplayOrder = maxDisplayOrder + 1;
+
+  if (!cardId) {
+    cardId = 'DL_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+  }
+
+  dailySh.appendRow([
+    'Y',
+    type,
+    title,
+    content,
+    subtext,
+    tag,
+    optionA,
+    optionB,
+    optionC,
+    optionD,
+    correctOption,
+    nextDisplayOrder,
+    cardId,
+    audience,
+    isNaN(xp) ? 5 : xp
+  ]);
+
+  const updatesSh = ss.getSheetByName('Updates');
+  if (updatesSh) {
+    updatesSh.appendRow([
+      'Y',
+      'Daily Learning Added',
+      title + ' was added to Daily Learning.',
+      'info',
+      new Date(),
+      String(user.name || user.email || '').trim(),
+      'Learning',
+      'AdminLog'
+    ]);
+  }
+
+  clearPortalCaches();
+  return {
+    success: true,
+    cardId: cardId
+  };
+}
 function getOrCreateSpreadsheet_() {
   const ss = SpreadsheetApp.openById('11hc9yxH9F6P8SMQ62ry42WgPYmOPuSOj02U18XD9R1M');
 
   ensureSheet_(ss, 'Users', ['Email', 'Name', 'Role', 'Enabled']);
   ensureSheet_(ss, 'Modules', ['Enabled', 'Module ID', 'Module Title', 'Module Subtitle', 'Lesson Order', 'Lesson Name', 'Lesson Type', 'Lesson Link', 'Video Embed URL', 'Training Visual File ID']);
-  ensureSheet_(ss, 'FAQ', ['Enabled', 'Question', 'Answer']);
-  ensureSheet_(ss, 'Updates', ['Enabled', 'Title', 'Message', 'Type']);
+  ensureSheet_(ss, 'Updates', ['Enabled', 'Title', 'Message', 'Type', 'Updated At', 'Updated By', 'Update Topic', 'Update Category']);
   ensureSheet_(ss, 'Progress', ['Email', 'Module ID', 'Lesson Name', 'Status', 'Updated At']);
   ensureSheet_(ss, 'Quizzes', ['Enabled', 'Module ID', 'Question ID', 'Question', 'Option A', 'Option B', 'Option C', 'Option D', 'Correct Option', 'Explanation']);
   ensureSheet_(ss, 'QuizResults', ['Email', 'Module ID', 'Score Percent', 'Result', 'Answers JSON', 'Submitted At']);
-  ensureSheet_(ss, 'Certificates', ['Email', 'Module ID', 'Certificate Name', 'File URL', 'Issued At']);
-  ensureSheet_(ss, 'Settings', ['Key', 'Value']);
+  ensureSheet_(ss, 'Certificates', ['Email', 'Module ID', 'Certificate Name', 'File URL', 'Issued At', 'File ID', 'Certificate ID']);
   ensureSheet_(ss, 'DailyLearning', ['Enabled', 'Type', 'Title', 'Content', 'Subtext', 'Tag', 'Option A', 'Option B', 'Option C', 'Option D', 'Correct Option', 'Display Order', 'Card ID', 'Audience', 'XP']);
   ensureSheet_(ss, 'DailyLearningProgress', ['Email', 'Type', 'Title', 'Content', 'Tag', 'Card ID', 'XP Earned', 'Learned At']);
   ensureSheet_(ss, 'UserStreaks', ['Email', 'Current Streak', 'Best Streak', 'Total XP', 'Last Learned Date']);
@@ -2134,20 +2769,6 @@ function seedModulesSheet_(ss) {
   sh.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
 }
 
-function seedFaqSheet_(ss) {
-  const sh = ss.getSheetByName('FAQ');
-  if (sh.getLastRow() > 1) return;
-
-  const rows = [
-    ['Y', 'How do I apply for leave?', 'Please contact HR or follow the internal leave request process.'],
-    ['Y', 'Who do I contact for attendance issues?', 'Please contact HR and your reporting manager.'],
-    ['Y', 'Where are training files stored?', 'Training resources are available inside the portal and Drive resources section.'],
-    ['Y', 'What should I do if I miss a session?', 'Contact the training team and review the relevant module and files.']
-  ];
-
-  sh.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
-}
-
 function seedAnnouncementsSheet_(ss) {
   const sh = ss.getSheetByName('Announcements');
   if (sh.getLastRow() > 1) return;
@@ -2196,19 +2817,84 @@ function seedCertificatesSheet_(ss) {
   if (sh.getLastRow() > 1) return;
 }
 
-function seedSettingsSheet_(ss) {
-  const sh = ss.getSheetByName('Settings');
-  if (sh.getLastRow() > 1) return;
+function addQuizQuestion(payload) {
+  const user = getUserInfo_();
+  const access = evaluateUserAccess_(user);
+  if (!access.isAdmin) throw new Error('Only admins can add quiz questions.');
 
-  const rows = [
-    ['certificateFolderName', CONFIG.DEFAULT_CERTIFICATE_FOLDER_NAME],
-    ['chatbotMessage', 'AI chatbot can later be connected to Drive files, FAQs, and sheet-based training knowledge.'],
-    ['welcomeBanner', 'Welcome to the First Connect Health Training Portal']
-  ];
+  payload = payload || {};
 
-  sh.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+  const moduleId = String(payload.moduleId || '').trim();
+  const questionId = String(payload.questionId || '').trim();
+  const question = String(payload.question || '').trim();
+  const optionA = String(payload.optionA || '').trim();
+  const optionB = String(payload.optionB || '').trim();
+  const optionC = String(payload.optionC || '').trim();
+  const optionD = String(payload.optionD || '').trim();
+  const correctOption = String(payload.correctOption || '').trim().toUpperCase();
+  const explanation = String(payload.explanation || '').trim();
+
+  if (!moduleId) throw new Error('Module ID is required.');
+  if (!questionId) throw new Error('Question ID is required.');
+  if (!question) throw new Error('Question is required.');
+  if (!optionA || !optionB || !optionC || !optionD) {
+    throw new Error('All 4 options are required.');
+  }
+  if (['A', 'B', 'C', 'D'].indexOf(correctOption) === -1) {
+    throw new Error('Correct option must be A, B, C, or D.');
+  }
+
+  const ss = getOrCreateSpreadsheet_();
+  const sh = ss.getSheetByName('Quizzes');
+  if (!sh) throw new Error('Quizzes sheet not found.');
+
+  const values = sh.getDataRange().getValues();
+
+  for (let i = 1; i < values.length; i++) {
+    const enabled = String(values[i][0] || '').trim().toUpperCase();
+    const rowModuleId = String(values[i][1] || '').trim();
+    const rowQuestionId = String(values[i][2] || '').trim();
+
+    if (enabled === 'Y' && rowModuleId === moduleId && rowQuestionId === questionId) {
+      throw new Error('A quiz question with this Module ID and Question ID already exists.');
+    }
+  }
+
+  sh.appendRow([
+    'Y',
+    moduleId,
+    questionId,
+    question,
+    optionA,
+    optionB,
+    optionC,
+    optionD,
+    correctOption,
+    explanation
+  ]);
+
+  const updatesSh = ss.getSheetByName('Updates');
+  if (updatesSh) {
+    updatesSh.appendRow([
+      'Y',
+      'Quiz Question Added',
+      'Quiz question "' + question + '" was added for module ' + moduleId + '.',
+      'info',
+      new Date(),
+      String(user.name || user.email || '').trim(),
+      'Quiz',
+      'AdminLog'
+    ]);
+  }
+
+  clearPortalCaches();
+
+  return {
+    success: true,
+    moduleId: moduleId,
+    questionId: questionId
+  };
 }
-
 function getOrCreateFolderByName_(name) {
   const folders = DriveApp.getFoldersByName(name);
   if (folders.hasNext()) return folders.next();
