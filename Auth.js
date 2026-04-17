@@ -1,20 +1,3 @@
-function generateOTP_(email) {
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min
-
-  const ss = getOrCreateSpreadsheet_();
-  const sh = ss.getSheetByName('OTPRequests');
-
-  sh.appendRow([new Date(), email, otp, expiry, 'SENT', '']);
-
-  MailApp.sendEmail({
-    to: email,
-    subject: 'Your OTP - Training Portal',
-    body: 'Your OTP is: ' + otp + '\nValid for 5 minutes.'
-  });
-
-  return true;
-}
 function verifyOTP(email, inputOtp) {
   const ss = getOrCreateSpreadsheet_();
   const sh = ss.getSheetByName('OTPRequests');
@@ -81,36 +64,96 @@ function getAuthBootstrap_(ss, user) {
     reverifyMinutes: sessionState.reverifyMinutes
   };
 }
-
+function sendOtpEmail_(toEmail, subject, body) {
+  GmailApp.sendEmail(toEmail, subject, body, {
+    from: CONFIG.NO_REPLY_EMAIL,
+    name: 'First Connect Health',
+    replyTo: CONFIG.SUPPORT_EMAIL
+  });
+}
 function sendLoginOtp() {
-  const user = getUserInfo_();
-  const access = evaluateUserAccess_(user);
-  if (!access.domainAllowed) throw new Error('Access denied.');
+  const ctx = requireEnabledPortalUser_();
+  const email = String(ctx.user.email || '').trim().toLowerCase();
+  const cache = CacheService.getScriptCache();
+  const lock = LockService.getScriptLock();
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const preferredAlias = String(CONFIG.NO_REPLY_EMAIL || '').trim().toLowerCase();
+
+  if (!email || email === 'not available') {
+    throw new Error('User email is not available.');
+  }
+
+  lock.waitLock(3000);
+  try {
+    const cooldownKey = buildPortalOtpCooldownCacheKey_(email);
+    const cooldownActive = cache.get(cooldownKey);
+    if (cooldownActive) {
+      return {
+        success: false,
+        message: 'Please wait 60 seconds before requesting another OTP.'
+      };
+    }
+
+    cache.put(buildPortalOtpCacheKey_(email), otp, Number(CONFIG.OTP_EXPIRY_SECONDS || 300));
+    cache.put(buildPortalOtpAttemptsCacheKey_(email), '0', Number(CONFIG.OTP_EXPIRY_SECONDS || 300));
+    cache.put(cooldownKey, 'Y', Number(CONFIG.OTP_SEND_COOLDOWN_SECONDS || 60));
+    cache.remove(buildPortalOtpVerifiedCacheKey_(email));
+  } finally {
+    lock.releaseLock();
+  }
 
   const ss = getOrCreateSpreadsheet_();
-  const email = String(user.email || '').trim();
-  if (!email || email === 'Not available') throw new Error('User email not available.');
-
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
-  const expiry = new Date(Date.now() + 5 * 60 * 1000);
-
   const sh = ss.getSheetByName('OTPRequests');
-  sh.appendRow([new Date(), email, otp, expiry, 'SENT', '']);
+  const now = new Date();
+  const expiry = new Date(now.getTime() + (Number(CONFIG.OTP_EXPIRY_SECONDS || 300) * 1000));
 
-  MailApp.sendEmail({
-    to: email,
-    subject: 'Training Portal OTP',
-    body: 'Your OTP is: ' + otp + '\n\nThis OTP will expire in 5 minutes.'
+  sh.appendRow([
+    now,
+    email,
+    otp,
+    expiry,
+    'SENT',
+    ''
+  ]);
+
+  const subject = 'Training Portal OTP';
+  const body = [
+    'Hello ' + (ctx.user.name || 'User') + ',',
+    '',
+    'Your OTP is: ' + otp,
+    '',
+    'This OTP will expire in 5 minutes.',
+    'If you did not request this, please ignore this email.',
+    '',
+    'Training Portal'
+  ].join('\n');
+
+  GmailApp.sendEmail(email, subject, body, {
+    from: preferredAlias,
+    name: 'First Connect Health',
+    replyTo: CONFIG.SUPPORT_EMAIL
   });
-
-  writeAuditLog_(ss, email, 'OTP_SENT', 'OTP sent to email', 'SUCCESS');
 
   return {
     success: true,
-    message: 'OTP sent to your company email.'
+    message: 'OTP sent to your enabled email address.'
   };
 }
+function debugCurrentPortalUser() {
+  const user = getUserInfo_();
+  const access = evaluateUserAccess_(user);
 
+  return {
+    email: user.email,
+    domain: user.domain,
+    name: user.name,
+    domainAllowed: access.domainAllowed,
+    userFound: access.userFound,
+    enabled: access.enabled,
+    allowed: access.allowed,
+    role: access.role
+  };
+}
 function verifyLoginOtp(otpInput) {
   const user = getUserInfo_();
   const access = evaluateUserAccess_(user);
