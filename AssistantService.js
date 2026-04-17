@@ -7,11 +7,11 @@ const ASSISTANT_UNANSWERED_SHEET_NAME = 'AI_Unanswered_Log';
  * Reads only from AI_Chatbot_Knowledge
  */
 function askAssistant(question) {
+  const rawQuestion = String(question || '').trim();
+  const cleanQuestion = normalizeAssistantText_(rawQuestion);
+
   try {
     Logger.log('QUESTION RECEIVED: ' + question);
-
-    const rawQuestion = String(question || '').trim();
-    const cleanQuestion = normalizeAssistantText_(rawQuestion);
 
     Logger.log('RAW QUESTION: ' + rawQuestion);
     Logger.log('CLEAN QUESTION: ' + cleanQuestion);
