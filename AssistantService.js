@@ -8,56 +8,197 @@ const ASSISTANT_UNANSWERED_SHEET_NAME = 'AI_Unanswered_Log';
  */
 function askAssistant(question) {
   try {
+    Logger.log('QUESTION RECEIVED: ' + question);
+
     const rawQuestion = String(question || '').trim();
     const cleanQuestion = normalizeAssistantText_(rawQuestion);
+
+    Logger.log('RAW QUESTION: ' + rawQuestion);
+    Logger.log('CLEAN QUESTION: ' + cleanQuestion);
 
     if (!cleanQuestion) {
       return {
         ok: false,
         answer: 'Please type a question so I can help.',
-        links: []
+        links: [],
+        suggestions: getSmartSuggestions_(cleanQuestion),
+        moduleId: ''
       };
     }
 
+    const debugInfo = debugAskAssistant_(cleanQuestion);
+    Logger.log('DEBUG INFO: ' + JSON.stringify(debugInfo));
+
     const matchResult = findBestAssistantAnswer_(cleanQuestion);
     const match = matchResult.match;
+
+    Logger.log('MATCH RESULT: ' + JSON.stringify(matchResult));
 
     if (!match) {
       logUnansweredAssistantQuestion_(rawQuestion, cleanQuestion);
       return {
         ok: true,
-        answer: 'I could not find a grounded answer in AI_Chatbot_Knowledge. Please rephrase your question or contact support.',
+        answer: 'I could not find a matching grounded answer in the chatbot knowledge sheet.',
         links: [],
-        suggestions: matchResult.suggestions
+        suggestions: getSmartSuggestions_(cleanQuestion),
+        moduleId: ''
       };
     }
 
+    var detectedModuleId =
+      extractAssistantModuleId_(match.mainQuestion) ||
+      extractAssistantModuleId_(match.answer);
+
     return {
       ok: true,
-      answer: match.answer,
-      links: match.links,
-      matchedQuestion: match.mainQuestion,
+      answer: buildAssistantDisplayText_(match.answer),
+      links: match.links || [],
+      matchedQuestion: match.mainQuestion || '',
       rowId: match.id || '',
       confidence: match.score || 0,
-      suggestions: matchResult.suggestions
+      suggestions: getSmartSuggestions_(cleanQuestion),
+      moduleId: detectedModuleId || ''
     };
   } catch (error) {
     Logger.log('askAssistant error: ' + error);
+    Logger.log('askAssistant stack: ' + (error && error.stack ? error.stack : 'no stack'));
+
     return {
       ok: false,
-      answer: 'Something went wrong while checking AI_Chatbot_Knowledge. Please try again.',
-      links: []
+      answer: 'Backend error: ' + (error && error.message ? error.message : String(error)),
+      links: [],
+      suggestions: getSmartSuggestions_(cleanQuestion),
+      moduleId: ''
     };
   }
 }
+function extractAssistantModuleId_(text) {
+  var value = String(text || '').trim();
 
+  if (!value) {
+    return '';
+  }
+
+  var directMatch = value.match(/\bM\s*([0-9]+)\b/i);
+  if (directMatch && directMatch[1]) {
+    return 'M' + directMatch[1];
+  }
+
+  var moduleMatch = value.match(/\bmodule\s*([0-9]+)\b/i);
+  if (moduleMatch && moduleMatch[1]) {
+    return 'M' + moduleMatch[1];
+  }
+
+  return '';
+}
+function buildAssistantDisplayText_(answer) {
+  var text = String(answer || '').trim();
+
+  if (!text) {
+    return '';
+  }
+
+  text = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  var parts = text.split(/\n+/).map(function(part) {
+    return String(part || '').trim();
+  }).filter(Boolean);
+
+  if (!parts.length) {
+    return text;
+  }
+
+  return parts.join('\n\n');
+}
+function normalizeAssistantSuggestions_(suggestions, rawQuestion, match) {
+  var cleaned = [];
+  var seen = {};
+  var raw = String(rawQuestion || '').trim().toLowerCase();
+  var matchedQuestion = match && match.mainQuestion
+    ? String(match.mainQuestion).trim().toLowerCase()
+    : '';
+
+  (Array.isArray(suggestions) ? suggestions : []).forEach(function(item) {
+    var value = String(item || '').trim();
+    var key = value.toLowerCase();
+
+    if (!value) return;
+    if (key === raw) return;
+    if (matchedQuestion && key === matchedQuestion) return;
+    if (seen[key]) return;
+
+    seen[key] = true;
+    cleaned.push(value);
+  });
+
+  if (!cleaned.length && match && match.mainQuestion) {
+    [
+      'Can you explain this step by step?',
+      'Is there a related module for this?',
+      'Do you want the exact process?'
+    ].forEach(function(item) {
+      var key = String(item).toLowerCase();
+      if (!seen[key]) {
+        seen[key] = true;
+        cleaned.push(item);
+      }
+    });
+  }
+
+  if (!cleaned.length) {
+    [
+      'Show me the related module',
+      'Explain it step by step',
+      'Ask another training question'
+    ].forEach(function(item) {
+      var key = String(item).toLowerCase();
+      if (!seen[key]) {
+        seen[key] = true;
+        cleaned.push(item);
+      }
+    });
+  }
+
+  return cleaned.slice(0, 3);
+}
+function debugAskAssistant_(cleanQuestion) {
+  const spreadsheet = getAssistantSpreadsheet_();
+  const sheet = spreadsheet.getSheetByName(ASSISTANT_SHEET_NAME);
+
+  if (!sheet) {
+    throw new Error('Sheet not found: ' + ASSISTANT_SHEET_NAME);
+  }
+
+  const values = sheet.getDataRange().getDisplayValues();
+
+  if (!values || !values.length) {
+    throw new Error('Sheet is empty: ' + ASSISTANT_SHEET_NAME);
+  }
+
+  const headers = values[0] || [];
+  const totalRows = values.length;
+
+  return {
+    spreadsheetId: KNOWLEDGE_SPREADSHEET_ID,
+    sheetName: ASSISTANT_SHEET_NAME,
+    totalRows: totalRows,
+    headers: headers,
+    firstDataRow: values.length > 1 ? values[1] : [],
+    cleanQuestion: cleanQuestion
+  };
+}
 function getAssistantSpreadsheet_() {
   return SpreadsheetApp.openById(KNOWLEDGE_SPREADSHEET_ID);
 }
 
 function getAssistantKnowledgeRows_() {
   const cache = CacheService.getScriptCache();
-  const cacheKey = 'assistant_knowledge_rows_v2';
+  const cacheKey = 'assistant_knowledge_rows_v4';
   const cached = cache.get(cacheKey);
 
   if (cached) {
@@ -79,15 +220,24 @@ function getAssistantKnowledgeRows_() {
   const headers = values[0];
   const rows = values.slice(1);
   const headerMap = buildAssistantHeaderMap_(headers);
+
   const payload = {
     rows: rows,
     headerMap: headerMap
   };
 
-  cache.put(cacheKey, JSON.stringify(payload), 300);
+  try {
+    const serialized = JSON.stringify(payload);
+
+    if (serialized.length <= 90000) {
+      cache.put(cacheKey, serialized, 300);
+    }
+  } catch (error) {
+    Logger.log('Assistant cache skipped: ' + error);
+  }
+
   return payload;
 }
-
 function findBestAssistantAnswer_(cleanQuestion) {
   const knowledge = getAssistantKnowledgeRows_();
   const rows = knowledge.rows || [];
@@ -114,55 +264,157 @@ function findBestAssistantAnswer_(cleanQuestion) {
 
   let bestRow = null;
   let bestScore = 0;
-  const candidates = [];
 
   rows.forEach(function(row) {
     const answer = safeCell_(row, headerMap, 'Answer').trim();
     if (!answer) return;
 
-    const mainQuestion = normalizeAssistantText_(safeCell_(row, headerMap, 'Main Question'));
-    const alternateQuestions = safeCell_(row, headerMap, 'Alternate Questions');
-    const keywords = safeCell_(row, headerMap, 'Keywords');
+    const mainQuestionRaw = safeCell_(row, headerMap, 'Main Question');
+    const alternateQuestionsRaw = safeCell_(row, headerMap, 'Alternate Questions');
+    const keywordsRaw = safeCell_(row, headerMap, 'Keywords');
+
+    const mainQuestion = normalizeAssistantText_(mainQuestionRaw);
+    const alternateParts = splitAssistantTerms_(alternateQuestionsRaw);
+    const keywordParts = splitAssistantTerms_(keywordsRaw);
 
     let score = 0;
-    score += scoreAssistantField_(cleanQuestion, mainQuestion, 8);
-    score += scoreAssistantAlternateQuestions_(cleanQuestion, alternateQuestions, 7);
-    score += scoreAssistantKeywords_(cleanQuestion, keywords, 6);
+
+    score += scoreAssistantField_(cleanQuestion, mainQuestion, 10);
+    score += scoreAssistantAlternateQuestions_(cleanQuestion, alternateQuestionsRaw, 12);
+    score += scoreAssistantKeywords_(cleanQuestion, keywordsRaw, 10);
+
+    if (mainQuestion && cleanQuestion.indexOf(mainQuestion) !== -1) {
+      score += 6;
+    }
+
+    if (mainQuestion && mainQuestion.indexOf(cleanQuestion) !== -1) {
+      score += 5;
+    }
+
+    alternateParts.forEach(function(alt) {
+      if (!alt) return;
+
+      if (alt === cleanQuestion) {
+        score += 40;
+      } else if (alt.indexOf(cleanQuestion) !== -1 || cleanQuestion.indexOf(alt) !== -1) {
+        score += 12;
+      }
+    });
+
+    keywordParts.forEach(function(keyword) {
+      if (!keyword) return;
+
+      if (keyword === cleanQuestion) {
+        score += 30;
+      } else if (keyword.indexOf(cleanQuestion) !== -1 || cleanQuestion.indexOf(keyword) !== -1) {
+        score += 10;
+      }
+    });
+
+    const qTokens = tokenizeAssistantText_(cleanQuestion);
+    const mainTokens = tokenizeAssistantText_(mainQuestion);
+    const sharedMainTokens = qTokens.filter(function(token) {
+      return mainTokens.indexOf(token) !== -1;
+    }).length;
+
+    if (sharedMainTokens >= 2) {
+      score += sharedMainTokens * 2;
+    }
+
+    alternateParts.forEach(function(alt) {
+      const altTokens = tokenizeAssistantText_(alt);
+      const sharedAltTokens = qTokens.filter(function(token) {
+        return altTokens.indexOf(token) !== -1;
+      }).length;
+
+      if (sharedAltTokens >= 2) {
+        score += sharedAltTokens * 3;
+      } else if (sharedAltTokens === 1 && qTokens.length === 1) {
+        score += 6;
+      }
+    });
+
+    keywordParts.forEach(function(keyword) {
+      const keywordTokens = tokenizeAssistantText_(keyword);
+      const sharedKeywordTokens = qTokens.filter(function(token) {
+        return keywordTokens.indexOf(token) !== -1;
+      }).length;
+
+      if (sharedKeywordTokens >= 2) {
+        score += sharedKeywordTokens * 2;
+      } else if (sharedKeywordTokens === 1 && qTokens.length === 1) {
+        score += 5;
+      }
+    });
 
     if (score > bestScore) {
       bestScore = score;
       bestRow = row;
     }
-
-    if (score > 0) {
-      candidates.push({
-        score: score,
-        mainQuestion: safeCell_(row, headerMap, 'Main Question').trim()
-      });
-    }
   });
-
-  candidates.sort(function(a, b) {
-    return b.score - a.score;
-  });
-
-  const suggestions = candidates.slice(0, 3).map(function(item) {
-    return item.mainQuestion;
-  }).filter(Boolean);
 
   if (!bestRow || bestScore < 8) {
     return {
       match: null,
-      suggestions: suggestions
+      suggestions: []
     };
   }
 
   return {
     match: buildAssistantResult_(bestRow, headerMap, bestScore),
-    suggestions: suggestions
+    suggestions: []
   };
 }
+function normalizeAssistantTokenForIntent_(token) {
+  var value = String(token || '').trim().toLowerCase();
 
+  if (!value) {
+    return '';
+  }
+
+  if (value.length > 4 && /ies$/.test(value)) {
+    return value.replace(/ies$/, 'y');
+  }
+
+  if (value.length > 4 && /sses$/.test(value)) {
+    return value.replace(/es$/, '');
+  }
+
+  if (value.length > 3 && /s$/.test(value) && !/ss$/.test(value)) {
+    return value.replace(/s$/, '');
+  }
+
+  return value;
+}
+
+function reduceAssistantIntentText_(value) {
+  var text = normalizeAssistantText_(value);
+
+  if (!text) {
+    return '';
+  }
+
+  text = text
+    .replace(/\b(can you|could you|would you|please|pls)\b/g, ' ')
+    .replace(/\b(tell me|show me|help me|guide me|explain to me)\b/g, ' ')
+    .replace(/\b(i want to know|i need to know|i want|i need)\b/g, ' ')
+    .replace(/\b(what is|what are|how do i|how to|where is|where are|when is|when are|why is|why are)\b/g, ' ')
+    .replace(/\b(the|a|an|my|your|about)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!text) {
+    return '';
+  }
+
+  return text
+    .split(' ')
+    .map(function(token) {
+      return normalizeAssistantTokenForIntent_(token);
+    })
+    .filter(Boolean)
+    .join(' ');
+}
 function logUnansweredAssistantQuestion_(rawQuestion, cleanQuestion) {
   const spreadsheet = getAssistantSpreadsheet_();
   const sheet = ensureAssistantUnansweredSheet_(spreadsheet);
@@ -361,35 +613,143 @@ function extractAssistantLinks_(row, headerMap) {
 }
 
 function buildAssistantHeaderMap_(headers) {
-  const requiredHeaders = [
-    'ID',
-    'Main Question',
-    'Alternate Questions',
-    'Keywords',
-    'Answer',
-    'Link Title 1',
-    'Link URL 1',
-    'Link Title 2',
-    'Link URL 2',
-    'Last Updated'
-  ];
-
   const map = {};
 
-  requiredHeaders.forEach(function(name) {
-    const index = headers.indexOf(name);
-    if (index === -1) {
-      throw new Error('Missing required column in AI_Chatbot_Knowledge: ' + name);
-    }
-    map[name] = index;
-  });
+  map['ID'] = findAssistantHeaderIndex_(headers, [
+    'ID',
+    'Id',
+    'Row ID',
+    'RowID'
+  ]);
+
+  map['Main Question'] = findAssistantHeaderIndex_(headers, [
+    'Main Question',
+    'Question',
+    'Primary Question',
+    'User Question'
+  ]);
+
+  map['Alternate Questions'] = findAssistantHeaderIndex_(headers, [
+    'Alternate Questions',
+    'Alternate Question',
+    'Alt Questions',
+    'Alternative Questions',
+    'Variations',
+    'Question Variations'
+  ]);
+
+  map['Keywords'] = findAssistantHeaderIndex_(headers, [
+    'Keywords',
+    'Keyword',
+    'Tags',
+    'Key Terms'
+  ]);
+
+  map['Answer'] = findAssistantHeaderIndex_(headers, [
+    'Answer',
+    'Response',
+    'Grounded Answer',
+    'Bot Answer'
+  ]);
+
+  map['Link Title 1'] = findAssistantHeaderIndex_(headers, [
+    'Link Title 1',
+    'Link 1 Title',
+    'Resource Title 1',
+    'CTA Title 1'
+  ], true);
+
+  map['Link URL 1'] = findAssistantHeaderIndex_(headers, [
+    'Link URL 1',
+    'Link 1 URL',
+    'Resource URL 1',
+    'CTA URL 1'
+  ], true);
+
+  map['Link Title 2'] = findAssistantHeaderIndex_(headers, [
+    'Link Title 2',
+    'Link 2 Title',
+    'Resource Title 2',
+    'CTA Title 2'
+  ], true);
+
+  map['Link URL 2'] = findAssistantHeaderIndex_(headers, [
+    'Link URL 2',
+    'Link 2 URL',
+    'Resource URL 2',
+    'CTA URL 2'
+  ], true);
+
+  map['Last Updated'] = findAssistantHeaderIndex_(headers, [
+    'Last Updated',
+    'Updated At',
+    'Last Modified',
+    'Modified At'
+  ], true);
+
+  if (map['Main Question'] === -1) {
+    throw new Error('Missing required column in AI_Chatbot_Knowledge: Main Question');
+  }
+
+  if (map['Answer'] === -1) {
+    throw new Error('Missing required column in AI_Chatbot_Knowledge: Answer');
+  }
+
+  if (map['ID'] === -1) {
+    map['ID'] = '';
+  }
+
+  if (map['Alternate Questions'] === -1) {
+    map['Alternate Questions'] = '';
+  }
+
+  if (map['Keywords'] === -1) {
+    map['Keywords'] = '';
+  }
 
   return map;
 }
+function debugAssistantSheet() {
+  const ss = SpreadsheetApp.openById(KNOWLEDGE_SPREADSHEET_ID);
+  const sh = ss.getSheetByName(ASSISTANT_SHEET_NAME);
 
+  if (!sh) {
+    return '❌ Sheet not found';
+  }
+
+  const data = sh.getDataRange().getValues();
+
+  return {
+    sheetName: sh.getName(),
+    totalRows: data.length,
+    headers: data[0],
+    firstRow: data[1]
+  };
+}
 function safeCell_(row, headerMap, headerName) {
   const index = headerMap[headerName];
-  return index === undefined ? '' : String(row[index] || '');
+
+  if (index === undefined || index === null || index === '' || index < 0) {
+    return '';
+  }
+
+  return String(row[index] || '');
+}
+function findAssistantHeaderIndex_(headers, aliases, optional) {
+  const normalizedHeaders = (headers || []).map(function(header) {
+    return normalizeAssistantText_(header);
+  });
+
+  for (var i = 0; i < aliases.length; i++) {
+    var target = normalizeAssistantText_(aliases[i]);
+    var index = normalizedHeaders.indexOf(target);
+
+    if (index !== -1) {
+      return index;
+    }
+  }
+
+  return optional ? -1 : -1;
 }
 
 function normalizeAssistantText_(value) {
