@@ -55,185 +55,110 @@ function renderDailyLearningCard() {
   const block = ((state || {}).data || {}).dailyLearning || {};
   const card = block.todayCard || null;
   const progress = block.progress || { seenCardIds: [], learnedCardIds: [] };
-  const streak = block.streak || { currentStreak: 0, bestStreak: 0, totalXp: 0 };
 
-  if (!card) {
-    return `
-      <section class="section" style="margin-top:14px;">
-        <div class="card" style="border:1px solid #dbe8f3;background:#f8fbff;">
-          <div class="pill">Daily Learning</div>
-          <h3 style="margin-top:10px;">No daily learning card available</h3>
-          <p class="muted">Add enabled rows in the DailyLearning sheet to show staffing and recruiter learning content here.</p>
-        </div>
-      </section>
-    `;
-  }
+  if (!card) return '';
 
-  const type = String(card.type || 'Tip');
-  const tag = String(card.tag || 'Daily Learning');
-  const title = String(card.title || '');
-  const content = String(card.content || '');
-  const subtext = String(card.subtext || '');
   const cardId = String(card.cardId || '');
-  const xp = Number(card.xp || 5);
-
-  const isQuiz = type.toLowerCase() === 'quiz';
-  const isQuote = type.toLowerCase() === 'quote';
-  const seen = Array.isArray(progress.seenCardIds) && progress.seenCardIds.indexOf(cardId) > -1;
   const learned = Array.isArray(progress.learnedCardIds) && progress.learnedCardIds.indexOf(cardId) > -1;
 
   return `
-    <section class="section" style="margin-top:14px;">
+    <section class="section" style="margin-top:10px;">
       <div
         class="card"
         style="
           border:1px solid #dbe8f3;
           background:linear-gradient(135deg,#f8fbff 0%, #ffffff 100%);
-          box-shadow:0 12px 28px rgba(15,79,134,0.08);
+          padding:14px;
         "
       >
-        <div class="top-strip" style="margin-bottom:10px;align-items:flex-start;">
+
+        <!-- HEADER -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <div>
             <div class="pill">Daily Learning Card</div>
-            <h3 style="margin:10px 0 0;">${escapeHtml(title || 'Daily Learning')}</h3>
-            <p class="page-subtitle" style="margin-top:8px;">A quick staffing and recruiter learning booster for freshers and new joiners.</p>
+            <h3 style="margin:6px 0 0;">${escapeHtml(card.title || '')}</h3>
           </div>
 
-          <div class="toolbar" style="display:flex;gap:8px;flex-wrap:wrap;">
-            <div class="pill" style="background:#fff4dd;color:#9a6a00;">XP ${xp}</div>
-            <div class="pill" style="background:#e8f1fb;color:#0f4f86;">🔥 ${Number(streak.currentStreak) || 0} day streak</div>
-            <div class="pill" style="background:#e8f7ee;color:#1d7f49;">⭐ ${Number(streak.totalXp) || 0} XP</div>
-            <button type="button" class="btn btn-secondary" id="shuffleDailyLearningBtn">Shuffle</button>
+          <div style="display:flex;gap:8px;">
+            <div class="pill">XP ${card.xp || 0}</div>
+            <button class="btn btn-secondary" id="shuffleDailyLearningBtn">Shuffle</button>
           </div>
         </div>
 
+        <!-- MAIN GRID -->
         <div
           style="
             display:grid;
-            grid-template-columns:minmax(0, 180px) minmax(0, 1fr);
-            gap:16px;
+            grid-template-columns:220px 1fr;
+            gap:12px;
             align-items:stretch;
           "
         >
+
+          <!-- LEFT PANEL -->
           <div
             style="
-              border-radius:18px;
+              border-radius:16px;
               background:#0f4f86;
-              color:#ffffff;
-              padding:18px;
+              color:#fff;
+              padding:14px;
               display:flex;
               flex-direction:column;
               justify-content:space-between;
-              min-height:180px;
             "
           >
             <div>
-              <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:0.88;">Type</div>
-              <div style="font-size:24px;font-weight:700;margin-top:8px;">${escapeHtml(type)}</div>
+              <div style="font-size:11px;opacity:0.8;">TYPE</div>
+              <div style="font-size:20px;font-weight:700;margin-top:4px;">${escapeHtml(card.type)}</div>
+
+              <div style="margin-top:10px;font-size:11px;opacity:0.8;">TAG</div>
+              <div style="font-size:13px;font-weight:600;margin-top:4px;">${escapeHtml(card.tag)}</div>
             </div>
 
-            <div style="margin-top:18px;">
-              <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:0.88;">Tag</div>
-              <div style="font-size:14px;font-weight:600;margin-top:8px;">${escapeHtml(tag)}</div>
-            </div>
-
-            <div style="margin-top:18px;font-size:13px;opacity:0.92;">
-              ${seen ? '👁 Seen' : '🆕 New'}
-              <br>
+            <!-- STATUS MOVED UP -->
+            <div style="margin-top:12px;font-size:12px;">
               ${learned ? '✅ Learned' : '📘 Not learned yet'}
+              <br>
+              ${progress.seenCardIds.includes(cardId) ? '👁 Seen' : '🆕 New'}
             </div>
           </div>
 
+          <!-- RIGHT PANEL -->
           <div
             style="
               border:1px solid #dbe8f3;
-              border-radius:18px;
-              padding:18px;
-              background:#ffffff;
+              border-radius:16px;
+              padding:14px;
               display:flex;
               flex-direction:column;
               justify-content:space-between;
-              min-height:180px;
             "
           >
-            <div>
-              <div style="font-size:18px;font-weight:700;color:#0f2740;line-height:1.5;">
-                ${escapeHtml(content)}
-              </div>
-
-              ${
-                !isQuote && subtext
-                  ? `<div class="muted" style="margin-top:12px;line-height:1.7;">${escapeHtml(subtext)}</div>`
-                  : ''
-              }
-
-              ${
-                isQuiz
-                  ? `
-                    <div style="margin-top:16px;display:grid;gap:10px;">
-                      ${[
-                        { key: 'A', text: card.optionA || '' },
-                        { key: 'B', text: card.optionB || '' },
-                        { key: 'C', text: card.optionC || '' },
-                        { key: 'D', text: card.optionD || '' }
-                      ].filter(function(option) {
-                        return String(option.text || '').trim();
-                      }).map(function(option) {
-                        return `
-                          <div
-                            style="
-                              border:1px solid #d8e5f0;
-                              border-radius:12px;
-                              padding:12px 14px;
-                              background:#f8fbff;
-                              color:#244258;
-                              font-size:14px;
-                            "
-                          >
-                            <strong>${escapeHtml(option.key)}.</strong> ${escapeHtml(option.text)}
-                          </div>
-                        `;
-                      }).join('')}
-                    </div>
-
-                    ${
-                      card.correctOption
-                        ? `<div class="muted" style="margin-top:14px;font-size:13px;">Correct option: <strong>${escapeHtml(card.correctOption)}</strong></div>`
-                        : ''
-                    }
-                  `
-                  : ''
-              }
+            <!-- CONTENT -->
+            <div style="font-size:15px;font-weight:600;color:#0f2740;line-height:1.6;">
+              ${escapeHtml(card.content)}
             </div>
 
-            <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:18px;">
-              ${
-                isQuote && subtext
-                  ? `
-                    <div
-                      style="
-                        margin-top:18px;
-                        text-align:right;
-                        font-style:italic;
-                        color:#5f7285;
-                        font-size:14px;
-                        margin-left:auto;
-                      "
-                    >
-                      - ${escapeHtml(subtext)}
-                    </div>
-                  `
-                  : `<div></div>`
-              }
+            <!-- FOOTER -->
+            <div
+              style="
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+                margin-top:12px;
+              "
+            >
+              <div style="font-size:12px;color:#5f7285;">
+                ${learned ? 'Completed Today' : ''}
+              </div>
 
               <button
-                type="button"
                 class="btn ${learned ? 'btn-secondary' : 'btn-primary'}"
                 id="markLearnedBtn"
-                data-card-id="${escapeHtml(cardId)}"
+                data-card-id="${cardId}"
                 ${learned ? 'disabled' : ''}
               >
-                ${learned ? 'Learned' : 'Mark as Learned'}
+                ${learned ? 'Completed' : 'Mark as Learned'}
               </button>
             </div>
           </div>
@@ -265,9 +190,29 @@ function renderDailyLearningMeta(meta) {
 function renderWeeklyStreakStrip(days) {
   if (!Array.isArray(days) || !days.length) return '';
 
+  // Desired order: Sunday → Saturday
+  const order = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+  // Create a copy
+  const daysCopy = days.slice();
+
+  // Map by label (handle duplicate T/S carefully)
+  const used = {};
+  const orderedDays = [];
+
+  order.forEach(function(label) {
+    for (let i = 0; i < daysCopy.length; i++) {
+      if (daysCopy[i].label === label && !used[i]) {
+        orderedDays.push(daysCopy[i]);
+        used[i] = true;
+        break;
+      }
+    }
+  });
+
   return `
     <div class="weekly-streak-strip" id="weeklyStreakStrip">
-      ${days.map(function(day) {
+      ${orderedDays.map(function(day) {
         return `
           <div class="weekly-streak-day ${day.completed ? 'is-complete' : ''}" title="${day.dateKey}">
             <span class="weekly-streak-label">${day.label}</span>
@@ -330,9 +275,19 @@ function handleMarkLearned(cardId) {
         state.data.dailyLearning.meta.totalXp = Number(result.totalXp || 0);
         state.data.dailyLearning.meta.todayXp = Number(result.todayXp || 0);
         state.data.dailyLearning.meta.todayCompleted = !!result.todayCompleted;
+
+        state.data.dailyLearning.streak = state.data.dailyLearning.streak || {};
+        state.data.dailyLearning.streak.currentStreak = Number(result.streak || 0);
+        state.data.dailyLearning.streak.bestStreak = Number(result.bestStreak || state.data.dailyLearning.streak.bestStreak || 0);
+        state.data.dailyLearning.streak.totalXp = Number(result.totalXp || 0);
+
         state.data.dailyLearning.weeklyStatus = Array.isArray(result.weeklyDailyStatus)
           ? result.weeklyDailyStatus
           : state.data.dailyLearning.weeklyStatus;
+
+        state.data.dailyLearning.leaderboard = Array.isArray(result.leaderboard)
+          ? result.leaderboard
+          : state.data.dailyLearning.leaderboard;
       }
 
       setDailyLearningCompletedState(result);
@@ -342,7 +297,28 @@ function handleMarkLearned(cardId) {
         animateStreakPulse();
       }
 
-      showToast('Marked as learned. Great job!');
+      refreshDailyLearningLeaderboardDom(
+        ((state || {}).data || {}).dailyLearning ? state.data.dailyLearning.leaderboard : []
+      );
+
+      var xpEarned = Number(result && result.xpEarned || 0);
+      var streak = Number(result && result.streak || 0);
+      var bestStreak = Number(result && result.bestStreak || 0);
+      var feedback = 'Marked as learned successfully.';
+
+      if (xpEarned > 0 && streak > 0) {
+        feedback = 'Marked as learned. +' + xpEarned + ' XP earned. Streak: ' + streak + ' day' + (streak === 1 ? '' : 's') + '!';
+      } else if (xpEarned > 0) {
+        feedback = 'Marked as learned. +' + xpEarned + ' XP earned!';
+      } else if (streak > 0) {
+        feedback = 'Marked as learned. Streak: ' + streak + ' day' + (streak === 1 ? '' : 's') + '!';
+      }
+
+      if (bestStreak > 0 && bestStreak === streak) {
+        feedback += ' Best streak: ' + bestStreak + '.';
+      }
+
+      showToast(feedback);
     })
     .withFailureHandler(function(error) {
       if (btn) {
@@ -355,7 +331,6 @@ function handleMarkLearned(cardId) {
     .markDailyLearningComplete(cardId);
 }
 
-
 function setDailyLearningCompletedState(result) {
   var btn = document.getElementById('markLearnedBtn');
   var streakValue = document.getElementById('dailyStreakValue');
@@ -363,6 +338,13 @@ function setDailyLearningCompletedState(result) {
   var statusText = document.getElementById('dailyStatusText');
   var statusPill = document.getElementById('dailyStatusPill');
   var weeklyStrip = document.getElementById('weeklyStreakStrip');
+
+  var cardStreakPill = document.getElementById('dailyCardStreakPill');
+  var cardTotalXpPill = document.getElementById('dailyCardTotalXpPill');
+  var todayXpValue = document.getElementById('dailyTodayXpValue');
+  var bannerStreakValue = document.getElementById('dailyBannerStreakValue');
+  var banner = document.getElementById('dailyLearningCompletionBanner');
+  var cardHost = document.getElementById('dailyLearningCardHost');
 
   if (btn) {
     btn.disabled = true;
@@ -395,37 +377,96 @@ function setDailyLearningCompletedState(result) {
   if (weeklyStrip && Array.isArray(result.weeklyDailyStatus)) {
     weeklyStrip.outerHTML = renderWeeklyStreakStrip(result.weeklyDailyStatus);
   }
+
+  if (cardStreakPill) {
+    cardStreakPill.textContent = '🔥 ' + Number(result.streak || 0) + ' day streak';
+  }
+
+  if (cardTotalXpPill) {
+    cardTotalXpPill.textContent = '⭐ ' + Number(result.totalXp || 0) + ' XP';
+  }
+
+  if (todayXpValue) {
+    todayXpValue.textContent = Number(result.todayXp || 0);
+  }
+
+  if (bannerStreakValue) {
+    bannerStreakValue.textContent = Number(result.streak || 0);
+  }
+
+  if (!banner && cardHost) {
+    var topStrip = cardHost.querySelector('.top-strip');
+    if (topStrip) {
+      topStrip.insertAdjacentHTML('afterend', renderDailyLearningCompletionBanner({
+        todayCompleted: true,
+        todayXp: Number(result.todayXp || 0),
+        streak: Number(result.streak || 0)
+      }));
+    }
+  }
 }
-
-
 function showXpBurst(xp) {
   if (!xp) return;
 
-  var host = document.querySelector('.daily-learning-card') || document.body;
+  var host = document.getElementById('dailyLearningCardHost') || document.body;
+  if (host !== document.body) {
+    host.style.position = host.style.position || 'relative';
+  }
+
   var burst = document.createElement('div');
-  burst.className = 'xp-burst';
   burst.textContent = '+' + xp + ' XP';
+  burst.style.position = host === document.body ? 'fixed' : 'absolute';
+  burst.style.right = '18px';
+  burst.style.top = '18px';
+  burst.style.zIndex = '50';
+  burst.style.padding = '12px 16px';
+  burst.style.borderRadius = '999px';
+  burst.style.background = '#fff4dd';
+  burst.style.color = '#9a6a00';
+  burst.style.fontWeight = '800';
+  burst.style.boxShadow = '0 12px 24px rgba(154,106,0,0.18)';
+  burst.style.pointerEvents = 'none';
+  burst.style.opacity = '0';
+  burst.style.transform = 'translateY(12px) scale(0.92)';
 
   host.appendChild(burst);
+
+  burst.animate(
+    [
+      { opacity: 0, transform: 'translateY(12px) scale(0.92)' },
+      { opacity: 1, transform: 'translateY(0) scale(1)' },
+      { opacity: 1, transform: 'translateY(-10px) scale(1.02)' },
+      { opacity: 0, transform: 'translateY(-22px) scale(0.98)' }
+    ],
+    {
+      duration: 1100,
+      easing: 'ease-out',
+      fill: 'forwards'
+    }
+  );
 
   setTimeout(function() {
     if (burst && burst.parentNode) {
       burst.parentNode.removeChild(burst);
     }
-  }, 900);
+  }, 1150);
 }
-
-
 function animateStreakPulse() {
   var streakBar = document.getElementById('dailyMetaBar');
-  if (!streakBar) return;
+  if (!streakBar || !streakBar.animate) return;
 
-  streakBar.classList.remove('streak-pulse');
-  void streakBar.offsetWidth;
-  streakBar.classList.add('streak-pulse');
+  streakBar.animate(
+    [
+      { transform: 'scale(1)', boxShadow: '0 0 0 rgba(15,79,134,0)' },
+      { transform: 'scale(1.015)', boxShadow: '0 14px 30px rgba(15,79,134,0.12)' },
+      { transform: 'scale(1)', boxShadow: '0 0 0 rgba(15,79,134,0)' }
+    ],
+    {
+      duration: 650,
+      easing: 'ease-out'
+    }
+  );
 }
-
-
 function bindDailyLearningActions() {
   const shuffleBtn = document.getElementById('shuffleDailyLearningBtn');
   const markLearnedBtn = document.getElementById('markLearnedBtn');
@@ -608,28 +649,67 @@ function bindDailyLearningActions() {
   }
 
   function initApp() {
-    google.script.run
-      .withSuccessHandler(function(data) {
-        state.data = data || {};
+  const app = document.getElementById('app');
 
-        const auth = state.data.auth || {};
-        state.authRequired = !!auth.requireOtp;
-        state.authMode = auth.mode || '';
-        state.authMessage = auth.message || '';
-        state.inactivityMinutes = Number(auth.reverifyMinutes || 60);
-
-        renderApp();
-
-        if (!state.authRequired) {
-          startInactivityWatch();
-          bindGlobalActivityWatch();
-        }
-      })
-      .withFailureHandler(function(err) {
-        renderError('Failed to load portal data', err);
-      })
-      .getPortalBootstrap();
+  if (app) {
+    app.innerHTML = `
+      <div class="loading-screen">
+        <div class="loading-card">
+          <h2>Loading portal...</h2>
+          <p>Please wait while your training portal is prepared.</p>
+        </div>
+      </div>
+    `;
   }
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      state.data = data || {};
+
+      const auth = state.data.auth || {};
+      state.authRequired = !!auth.requireOtp;
+      state.authMode = auth.mode || '';
+      state.authMessage = auth.message || '';
+      state.inactivityMinutes = Number(auth.reverifyMinutes || 60);
+
+      renderApp();
+
+      if (!state.authRequired) {
+        startInactivityWatch();
+        bindGlobalActivityWatch();
+      }
+
+      google.script.run
+        .withSuccessHandler(function(deferred) {
+          deferred = deferred || {};
+
+          state.data.dailyLearning = deferred.dailyLearning || state.data.dailyLearning;
+          state.data.updates = deferred.updates || state.data.updates;
+          state.data.progressSummary = deferred.progressSummary || state.data.progressSummary;
+          state.data.quizSummary = deferred.quizSummary || state.data.quizSummary;
+          state.data.dashboardStats = deferred.dashboardStats || state.data.dashboardStats;
+          state.data.modules = deferred.modules || state.data.modules;
+          state.data.progressMap = deferred.progressMap || state.data.progressMap;
+          state.data.resources = deferred.resources || state.data.resources;
+          state.data.adminSnapshot = deferred.adminSnapshot || state.data.adminSnapshot;
+          state.data.recommendedAction = deferred.recommendedAction || state.data.recommendedAction;
+
+          renderApp();
+
+          if (state.currentPage !== 'dashboard') {
+            switchPage(state.currentPage);
+          }
+        })
+        .withFailureHandler(function(err) {
+          console.error('Deferred portal load failed', err);
+        })
+        .getDeferredPortalBootstrapData();
+    })
+    .withFailureHandler(function(err) {
+      renderError('Failed to load portal data', err);
+    })
+    .getInitialPortalBootstrap();
+}
 
   function renderError(title, err) {
     const app = document.getElementById('app');
@@ -734,48 +814,57 @@ function bindDailyLearningActions() {
   }
 
   function renderAuthModal() {
-    if (!state.authRequired) return '';
+  if (!state.authRequired) return '';
 
-    return `
-      <div class="auth-overlay">
-        <div class="auth-modal">
-          <div class="pill">Secure Verification</div>
-          <h3>${escapeHtml(state.authMode === 'reauth' ? 'Session expired' : 'Verify your login')}</h3>
-          <p class="muted">
-            ${escapeHtml(
-              state.authMessage ||
-              'Enter the OTP sent to your company email to continue.'
-            )}
-          </p>
+  let authTitle = 'Verify your login';
 
-          <input
-            id="otpInput"
-            class="field"
-            type="text"
-            maxlength="6"
-            inputmode="numeric"
-            placeholder="Enter 6-digit OTP"
-            value="${escapeHtml(state.otpValue || '')}"
-            style="margin-top:14px;"
-          >
-
-          <div class="lesson-actions" style="margin-top:14px;">
-            <button class="btn btn-secondary" id="sendOtpBtn" ${state.authBusy ? 'disabled' : ''}>
-              ${state.authBusy ? 'Please wait...' : 'Send OTP'}
-            </button>
-            <button class="btn btn-primary" id="verifyOtpBtn" ${state.authBusy ? 'disabled' : ''}>
-              ${state.authBusy ? 'Verifying...' : 'Verify OTP'}
-            </button>
-          </div>
-
-          <p class="muted" style="margin-top:12px;font-size:12px;">
-            Access is allowed only for approved First Connect Health users.
-          </p>
-        </div>
-      </div>
-    `;
+  if (state.authBusy) {
+    authTitle = 'Verifying OTP';
+  } else if (state.authMessage && state.authMessage.toLowerCase().indexOf('otp sent') > -1) {
+    authTitle = 'Verify OTP';
+  } else if (state.authMode === 'reauth') {
+    authTitle = 'Session expired';
   }
 
+  return `
+    <div class="auth-overlay">
+      <div class="auth-modal">
+        <div class="pill">Secure Verification</div>
+        <h3>${escapeHtml(authTitle)}</h3>
+        <p class="muted">
+          ${escapeHtml(
+            state.authMessage ||
+            'Enter the OTP sent to your company email to continue.'
+          )}
+        </p>
+
+        <input
+          id="otpInput"
+          class="field"
+          type="text"
+          maxlength="6"
+          inputmode="numeric"
+          placeholder="Enter 6-digit OTP"
+          value="${escapeHtml(state.otpValue || '')}"
+          style="margin-top:14px;"
+        >
+
+        <div class="lesson-actions" style="margin-top:14px;">
+          <button class="btn btn-secondary" id="sendOtpBtn" ${state.authBusy ? 'disabled' : ''}>
+            ${state.authBusy ? 'Please wait...' : 'Send OTP'}
+          </button>
+          <button class="btn btn-primary" id="verifyOtpBtn" ${state.authBusy ? 'disabled' : ''}>
+            ${state.authBusy ? 'Verifying...' : 'Verify OTP'}
+          </button>
+        </div>
+
+        <p class="muted" style="margin-top:12px;font-size:12px;">
+          Access is allowed only for approved First Connect Health users.
+        </p>
+      </div>
+    </div>
+  `;
+}
 function renderDashboardPage() {
   const d = state.data;
   const s = d.dashboardStats || {};
@@ -791,6 +880,7 @@ function renderDashboardPage() {
   const dailyMetaHtml = renderDailyLearningMeta((d.dailyLearning || {}).meta);
   const weeklyStripHtml = renderWeeklyStreakStrip((d.dailyLearning || {}).weeklyStatus);
   const recommendedActionHtml = renderRecommendedAction(d.recommendedAction);
+  const leaderboardHtml = renderDailyLearningLeaderboard((d.dailyLearning || {}).leaderboard || []);
 
   return `
   <section class="hero">
@@ -843,56 +933,47 @@ function renderDashboardPage() {
   ${dailyMetaHtml}
   ${weeklyStripHtml}
 
-    <section class="grid grid-4">
-      <div class="card stat-card">
-        <div class="label">Completed Lessons</div>
-        <div class="value">${Number(s.completedLessons) || 0}</div>
-      </div>
-
-      <div class="card stat-card">
-        <div class="label">Assessments Taken</div>
-        <div class="value">${Number(s.quizzesTaken) || 0}</div>
-      </div>
-
-      <div class="card stat-card">
-        <div class="label">Average Score</div>
-        <div class="value">${Number(s.avgQuizScore) || 0}%</div>
-      </div>
-
-      <div class="card stat-card">
-        <div class="label">Certificates Earned</div>
-        <div class="value">${Number(s.certificatesEarned) || 0}</div>
-
-        <div class="lesson-actions" style="margin-top:12px;">
-          ${
-            latestCertificate && latestCertificate.url
-              ? `
-                <a class="btn btn-secondary" target="_blank" href="${escapeHtml(latestCertificate.url)}">
-                  View Latest Certificate
-                </a>
-              `
-              : `
-                <button class="btn btn-secondary" type="button" disabled>
-                  No Certificate Yet
-                </button>
-              `
-          }
-        </div>
+    <section class="grid grid-4" style="gap:12px;">
+  ${[
+    { label: 'Completed Lessons', value: Number(s.completedLessons) || 0 },
+    { label: 'Assessments Taken', value: Number(s.quizzesTaken) || 0 },
+    { label: 'Average Score', value: (Number(s.avgQuizScore) || 0) + '%' },
+    { label: 'Certificates Earned', value: Number(s.certificatesEarned) || 0 }
+  ].map(function(item, index) {
+    return `
+      <div
+        class="card stat-card"
+        style="
+          padding:14px 16px;
+          min-height:90px;
+          display:flex;
+          flex-direction:column;
+          justify-content:center;
+        "
+      >
+        <div class="label" style="font-size:12px;">${item.label}</div>
+        <div class="value" style="font-size:22px;margin-top:6px;">${item.value}</div>
 
         ${
-          latestCertificate
+          index === 3
             ? `
-              <div class="muted" style="margin-top:10px;font-size:12px;">
-                Latest: ${escapeHtml(latestCertificate.moduleId || '')}
-                ${latestCertificate.issuedAt ? ` • Issued: ${escapeHtml(latestCertificate.issuedAt)}` : ''}
+              <div style="margin-top:8px;">
+                ${
+                  latestCertificate && latestCertificate.url
+                    ? `<a class="btn btn-secondary" style="padding:6px 10px;font-size:12px;" target="_blank" href="${escapeHtml(latestCertificate.url)}">View</a>`
+                    : `<button class="btn btn-secondary" style="padding:6px 10px;font-size:12px;" disabled>No Cert</button>`
+                }
               </div>
             `
             : ''
         }
       </div>
-    </section>
+    `;
+  }).join('')}
+</section>
 
     ${renderDailyLearningCard()}
+    ${leaderboardHtml}
 
     <section class="grid grid-2">
       <div class="card">
@@ -925,40 +1006,61 @@ function renderDashboardPage() {
       </div>
 
       ${
-        modules.length
-          ? `<div class="grid grid-2">
-              ${modules.map(function(module) {
-                const completed = (module.lessons || []).filter(function(lesson) {
-                  const key = buildProgressKey(module.id, lesson.name);
-                  return String((d.progressMap || {})[key] || '').toLowerCase() === 'completed';
-                }).length;
-                const total = (module.lessons || []).length;
-                const percent = total ? Math.round((completed / total) * 100) : 0;
+  modules.length
+    ? `<div style="display:grid;gap:14px;">
+        ${modules.map(function(module) {
+          const completed = (module.lessons || []).filter(function(lesson) {
+            const key = buildProgressKey(module.id, lesson.name);
+            return String((d.progressMap || {})[key] || '').toLowerCase() === 'completed';
+          }).length;
+          const total = (module.lessons || []).length;
+          const percent = total ? Math.round((completed / total) * 100) : 0;
 
-                return `
-                  <div class="card module-card">
-                    <div class="pill">${escapeHtml(module.subtitle || '')}</div>
-                    <h4>${escapeHtml(module.title)}</h4>
-                    <div class="module-sub">${escapeHtml(module.id)}</div>
+          return `
+            <div class="card module-card" style="padding:18px 20px;">
+              <div
+                style="
+                  display:flex;
+                  justify-content:space-between;
+                  align-items:flex-start;
+                  gap:24px;
+                  width:100%;
+                "
+              >
+                <div style="min-width:0;flex:0 1 auto;">
+                  <div class="pill">${escapeHtml(module.subtitle || '')}</div>
+                  <h4 style="margin:12px 0 0;">${escapeHtml(module.title)}</h4>
+                  <div class="module-sub" style="margin-top:6px;">${escapeHtml(module.id)}</div>
 
-                    <div class="muted" style="margin:12px 0 10px;">
-                      ${completed} / ${total} lessons completed
-                    </div>
-
-                    <div class="progress" style="margin-bottom:14px;">
-                      <div class="progress-fill" style="width:${percent}%"></div>
-                    </div>
-
-                    <div class="lesson-actions">
-                      <button class="btn btn-primary" onclick="switchPage('training')">View Module</button>
-                      <button class="btn btn-secondary" onclick="openModuleQuiz('${escapeHtml(module.id)}')">Assessment</button>
-                    </div>
+                  <div class="muted" style="margin:12px 0 10px;">
+                    ${completed} / ${total} lessons completed
                   </div>
-                `;
-              }).join('')}
-            </div>`
-          : `<div class="card empty-state">No modules available yet.</div>`
-      }
+
+                  <div class="progress" style="margin-bottom:0;max-width:320px;">
+                    <div class="progress-fill" style="width:${percent}%"></div>
+                  </div>
+                </div>
+
+                <div
+                  style="
+                    display:flex;
+                    align-items:center;
+                    gap:10px;
+                    flex:0 0 auto;
+                    margin-top:34px;
+                    white-space:nowrap;
+                  "
+                >
+                  <button class="btn btn-primary" onclick="switchPage('training')">View Module</button>
+                  <button class="btn btn-secondary" onclick="openModuleQuiz('${escapeHtml(module.id)}')">Assessment</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>`
+    : `<div class="card empty-state">No modules available yet.</div>`
+}
     </section>
 
     <section class="grid grid-2">
@@ -1000,16 +1102,24 @@ function renderDashboardPage() {
         updates.length
           ? `<div class="grid grid-2">
               ${updates.slice(0, 4).map(function(item) {
-                return `
-                  <div class="announcement ${escapeHtml(item.type || 'info')}">
-                    <div class="dot"></div>
-                    <div>
-                      <h4>${escapeHtml(item.title)}</h4>
-                      <p>${escapeHtml(item.message)}</p>
-                    </div>
-                  </div>
-                `;
-              }).join('')}
+  return `
+    <div class="announcement ${escapeHtml(item.type || 'info')}">
+      <div class="dot"></div>
+      <div>
+        <h4>${escapeHtml(item.title)}</h4>
+        <p>${escapeHtml(item.message)}</p>
+
+        <div class="muted" style="margin-top:8px;font-size:12px;line-height:1.6;">
+          ${item.updateTopic ? `<strong>Topic:</strong> ${escapeHtml(item.updateTopic)}` : ''}
+          ${item.updateTopic && item.updatedBy ? ` &nbsp;•&nbsp; ` : ''}
+          ${item.updatedBy ? `<strong>By:</strong> ${escapeHtml(item.updatedBy)}` : ''}
+          ${(item.updateTopic || item.updatedBy) && item.updatedAt ? ` &nbsp;•&nbsp; ` : ''}
+          ${item.updatedAt ? `<strong>At:</strong> ${escapeHtml(item.updatedAt)}` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}).join('')}
             </div>`
           : `<div class="card empty-state">No updates available.</div>`
       }
@@ -1019,6 +1129,7 @@ function renderDashboardPage() {
   function renderTrainingPage() {
   const d = state.data;
   const progressMap = d.progressMap || {};
+  state.trainingActiveVisuals = state.trainingActiveVisuals || {};
 
   return `
     <div class="top-strip">
@@ -1031,12 +1142,6 @@ function renderDashboardPage() {
     <section class="section">
       <div style="display:grid; gap:18px;">
         ${(d.modules || []).map(function(module) {
-          const visualFileId = module.visualFileId || '';
-          const visual = {
-            title: (module.title || 'Training') + ' Visual',
-            imageUrl: visualFileId ? getDriveImageUrlFromFileId(visualFileId, 1600) : ''
-          };
-
           const completed = (module.lessons || []).filter(function(lesson) {
             const key = buildProgressKey(module.id, lesson.name);
             return String((progressMap || {})[key] || '').toLowerCase() === 'completed';
@@ -1044,6 +1149,23 @@ function renderDashboardPage() {
 
           const total = (module.lessons || []).length;
           const percent = total ? Math.round((completed / total) * 100) : 0;
+
+          const activeVisualState = state.trainingActiveVisuals[module.id] || {};
+          const activeVisualFileId = String(
+            activeVisualState.visualFileId ||
+            getDefaultTrainingVisualForModule(module) ||
+            ''
+          ).trim();
+
+          const activeLessonName = String(activeVisualState.lessonName || '').trim() || (
+            (module.lessons || []).find(function(lesson) {
+              return String(lesson.trainingVisualFileId || '').trim() === activeVisualFileId;
+            }) || {}
+          ).name || module.title || 'Training';
+
+          const activeImageUrl = activeVisualFileId
+            ? getDriveImageUrlFromFileId(activeVisualFileId, 1600)
+            : '';
 
           return `
             <div
@@ -1055,7 +1177,12 @@ function renderDashboardPage() {
                 align-items:stretch;
               "
             >
-              <div class="card module-card" style="height:100%;">
+              <div
+                class="card module-card"
+                id="training-module-${escapeHtml(module.id)}"
+                data-module-id="${escapeHtml(module.id)}"
+                style="height:100%;scroll-margin-top:24px;"
+              >
                 <div class="pill">${escapeHtml(module.stage || module.subtitle || '')}</div>
                 <h4>${escapeHtml(module.title)}</h4>
                 <div class="module-sub">${escapeHtml(module.id)}</div>
@@ -1083,6 +1210,8 @@ function renderDashboardPage() {
                     const hasLink = !!lessonResourceLink;
                     const canEmbedResource = !!resourcePdfUrl;
 
+                    const lessonVisualFileId = String(lesson.trainingVisualFileId || '').trim();
+
                     const videoTargetId = 'video_' + escapeHtml(module.id) + '_' + lessonIndex;
                     const resourceTargetId = 'resource_' + escapeHtml(module.id) + '_' + lessonIndex;
                     const inlinePdfContainerId = 'inline_pdf_' + escapeHtml(module.id) + '_' + lessonIndex;
@@ -1105,6 +1234,7 @@ function renderDashboardPage() {
                                    data-module-id="${escapeHtml(module.id)}"
                                    data-lesson-name="${escapeHtml(lesson.name)}"
                                    data-target-id="${videoTargetId}"
+                                   data-visual-file-id="${escapeHtml(lessonVisualFileId)}"
                                  >Watch Video</button>`
                               : `<span class="mini-btn" style="pointer-events:none;opacity:0.65;">Watch Video</span>`
                           }
@@ -1119,6 +1249,7 @@ function renderDashboardPage() {
                                    data-target-id="${resourceTargetId}"
                                    data-pdf-url="${escapeHtml(resourcePdfUrl)}"
                                    data-inline-pdf-container-id="${escapeHtml(inlinePdfContainerId)}"
+                                   data-visual-file-id="${escapeHtml(lessonVisualFileId)}"
                                  >Open Resource</button>`
                               : `<span class="mini-btn" style="pointer-events:none;opacity:0.65;">Open Resource</span>`
                           }
@@ -1252,16 +1383,18 @@ function renderDashboardPage() {
               >
                 <div style="margin-bottom:12px;">
                   <div class="pill">Training Visual</div>
-                  <h4 style="margin-top:10px;margin-bottom:0;">${escapeHtml(visual.title)}</h4>
+                  <h4 id="trainingVisualTitle_${escapeHtml(module.id)}" style="margin-top:10px;margin-bottom:0;">
+                    ${escapeHtml((activeLessonName || module.title || 'Training') + ' Visual')}
+                  </h4>
                 </div>
 
                 ${
-                  visual.imageUrl
+                  activeImageUrl
                     ? `
                       <div
                         class="training-visual-trigger"
-                        data-image-url="${escapeHtml(visual.imageUrl)}"
-                        data-image-title="${escapeHtml(visual.title)}"
+                        data-image-url="${escapeHtml(activeImageUrl)}"
+                        data-image-title="${escapeHtml((activeLessonName || module.title || 'Training') + ' Visual')}"
                         style="
                           flex:1;
                           display:flex;
@@ -1269,8 +1402,9 @@ function renderDashboardPage() {
                         "
                       >
                         <img
-                          src="${escapeHtml(visual.imageUrl)}"
-                          alt="${escapeHtml(visual.title)}"
+                          id="trainingVisualImg_${escapeHtml(module.id)}"
+                          src="${escapeHtml(activeImageUrl)}"
+                          alt="${escapeHtml((activeLessonName || module.title || 'Training') + ' Visual')}"
                           loading="lazy"
                           referrerpolicy="no-referrer"
                           style="
@@ -1285,9 +1419,10 @@ function renderDashboardPage() {
                             padding:10px;
                             box-sizing:border-box;
                           "
-                          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                          onerror="this.style.display='none'; document.getElementById('trainingVisualEmpty_${escapeHtml(module.id)}').style.display='flex';"
                         >
                         <div
+                          id="trainingVisualEmpty_${escapeHtml(module.id)}"
                           style="
                             display:none;
                             width:100%;
@@ -1311,6 +1446,7 @@ function renderDashboardPage() {
                     `
                     : `
                       <div
+                        id="trainingVisualEmpty_${escapeHtml(module.id)}"
                         style="
                           flex:1;
                           width:100%;
@@ -1328,7 +1464,7 @@ function renderDashboardPage() {
                           box-sizing:border-box;
                         "
                       >
-                        No visual available for this module.
+                        No visual available for this lesson or module.
                       </div>
                     `
                 }
@@ -1343,7 +1479,42 @@ function renderDashboardPage() {
     ${renderResourceModal()}
   `;
 }
+function openSpecificModuleFromChatbot(moduleId) {
+  var targetModuleId = String(moduleId || '').trim();
+  if (!targetModuleId) {
+    return;
+  }
 
+  state.currentPage = 'training';
+  renderApp();
+
+  window.setTimeout(function() {
+    scrollToTrainingModule_(targetModuleId);
+  }, 60);
+}
+function scrollToTrainingModule_(moduleId) {
+  var target = document.getElementById('training-module-' + moduleId);
+  if (!target) {
+    switchPage('training');
+
+    window.setTimeout(function() {
+      var retryTarget = document.getElementById('training-module-' + moduleId);
+      if (retryTarget) {
+        retryTarget.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    }, 120);
+
+    return;
+  }
+
+  target.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start'
+  });
+}
   function renderTrainingImageModal() {
     return `
       <div
@@ -1415,74 +1586,106 @@ function renderDashboardPage() {
   }
 
   function renderQuizPage() {
-    const d = state.data;
-    const modules = d.modules || [];
-    const quizSummary = d.quizSummary || {};
+  const d = state.data;
+  const modules = d.modules || [];
+  const quizSummary = d.quizSummary || {};
 
-    return `
-      <div class="top-strip">
-        <div>
-          <h2 class="page-title">Assessments</h2>
-          <p class="page-subtitle">Take module assessments. Passing score: 70%. Certificates are generated automatically after passing.</p>
-        </div>
+  return `
+    <div class="top-strip">
+      <div>
+        <h2 class="page-title">Assessments</h2>
+        <p class="page-subtitle">Take module assessments. Passing score: 70%. Certificates are generated automatically after passing.</p>
+      </div>
+    </div>
+
+    <div class="grid grid-2">
+      <div class="card">
+        <div class="pill">Assessment Selection</div>
+        <label class="muted">Choose a module</label>
+        <select id="quizModuleSelect" class="select" style="margin-top:10px;">
+          <option value="">Select module</option>
+          ${modules.map(function(module) {
+            return `<option value="${escapeHtml(module.id)}" ${state.selectedModuleQuiz === module.id ? 'selected' : ''}>${escapeHtml(module.id + ' - ' + module.title)}</option>`;
+          }).join('')}
+        </select>
       </div>
 
-      <div class="grid grid-2">
-        <div class="card">
-          <div class="pill">Assessment Selection</div>
-          <label class="muted">Choose a module</label>
-          <select id="quizModuleSelect" class="select" style="margin-top:10px;">
-            <option value="">Select module</option>
-            ${modules.map(function(module) {
-              return `<option value="${escapeHtml(module.id)}" ${state.selectedModuleQuiz === module.id ? 'selected' : ''}>${escapeHtml(module.id + ' - ' + module.title)}</option>`;
-            }).join('')}
-          </select>
-        </div>
+      <div class="card quiz-summary-box">
+        <div class="pill">Your Assessment Summary</div>
+        <div class="muted">Assessments Taken</div>
+        <div class="score-big">${Number(quizSummary.quizzesTaken) || 0}</div>
+        <div class="muted">Average Score: ${Number(quizSummary.avgQuizScore) || 0}%</div>
+        <div class="muted">Certificates Earned: ${Number(quizSummary.certificatesEarned) || 0}</div>
+      </div>
+    </div>
 
-        <div class="card quiz-summary-box">
-          <div class="pill">Your Assessment Summary</div>
-          <div class="muted">Assessments Taken</div>
-          <div class="score-big">${Number(quizSummary.quizzesTaken) || 0}</div>
-          <div class="muted">Average Score: ${Number(quizSummary.avgQuizScore) || 0}%</div>
-          <div class="muted">Certificates Earned: ${Number(quizSummary.certificatesEarned) || 0}</div>
-        </div>
+    <section class="section" style="padding-bottom:110px;">
+      <h3>Assessment Questions</h3>
+      <div id="quizContainer">
+        ${renderQuizQuestions()}
       </div>
 
-      <section class="section" style="padding-bottom:110px;">
-        <h3>Assessment Questions</h3>
-        <div id="quizContainer">
-          ${renderQuizQuestions()}
-        </div>
+      <div class="lesson-actions" style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-start;padding-right:90px;">
+        <button class="btn btn-primary" id="submitQuizBtn">Submit Assessment</button>
+        <button class="btn btn-secondary" onclick="switchPage('training')">Go to Recruiter Learning Hub</button>
+        <button class="btn btn-secondary" onclick="switchPage('dashboard')">Go to Dashboard</button>
+      </div>
+    </section>
 
-        <div class="lesson-actions" style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-start;padding-right:90px;">
-          <button class="btn btn-primary" id="submitQuizBtn">Submit Assessment</button>
-          <button class="btn btn-secondary" onclick="switchPage('training')">Go to Recruiter Learning Hub</button>
-          <button class="btn btn-secondary" onclick="switchPage('dashboard')">Go to Dashboard</button>
-        </div>
-      </section>
+    ${
+      state.quizResult
+        ? `<section class="section" style="padding-bottom:110px;">
+            <h3>Latest Assessment Result</h3>
+            <div class="card">
+              <div class="score-big">${Number(state.quizResult.scorePercent) || 0}%</div>
+              <div class="muted">Correct Answers: ${Number(state.quizResult.correctAnswers) || 0} / ${Number(state.quizResult.totalQuestions) || 0}</div>
+              <div class="muted">Result: ${state.quizResult.passed ? 'Passed' : 'Failed'}</div>
+              ${
+                state.quizResult.certificate && state.quizResult.certificate.url
+                  ? `<div class="lesson-actions" style="margin-top:14px;">
+                      <a class="btn btn-primary" target="_blank" href="${escapeHtml(state.quizResult.certificate.url)}">Open Certificate</a>
+                    </div>`
+                  : ''
+              }
 
-      ${
-        state.quizResult
-          ? `<section class="section" style="padding-bottom:110px;">
-              <h3>Latest Assessment Result</h3>
-              <div class="card">
-                <div class="score-big">${Number(state.quizResult.scorePercent) || 0}%</div>
-                <div class="muted">Correct Answers: ${Number(state.quizResult.correctAnswers) || 0} / ${Number(state.quizResult.totalQuestions) || 0}</div>
-                <div class="muted">Result: ${state.quizResult.passed ? 'Passed' : 'Failed'}</div>
-                ${
-                  state.quizResult.certificate && state.quizResult.certificate.url
-                    ? `<div class="lesson-actions" style="margin-top:14px;">
-                        <a class="btn btn-primary" target="_blank" href="${escapeHtml(state.quizResult.certificate.url)}">Open Certificate</a>
-                      </div>`
-                    : ''
-                }
-              </div>
-            </section>`
-          : ''
-      }
-    `;
-  }
-
+              ${
+                state.quizResult.details && state.quizResult.details.length
+                  ? `<div style="margin-top:22px;">
+                      <h4 style="margin:0 0 14px;">Answer Review</h4>
+                      <div class="grid" style="gap:12px;">
+                        ${state.quizResult.details.map(function(item, idx) {
+                          const selectedLabel = item.selected ? item.selected : 'Not Answered';
+                          const explanationText = item.explanation ? item.explanation : 'No explanation available.';
+                          return `
+                            <div class="quiz-question" style="padding:16px;">
+                              <div style="font-weight:700;margin-bottom:8px;">Q${idx + 1}. ${escapeHtml(item.question || '')}</div>
+                              <div class="muted" style="margin-bottom:6px;">
+                                <strong>Your Answer:</strong> ${escapeHtml(selectedLabel)}
+                              </div>
+                              <div class="muted" style="margin-bottom:6px;">
+                                <strong>Correct Answer:</strong> ${escapeHtml(item.correctOption || '')}
+                              </div>
+                              <div style="margin-bottom:10px;">
+                                <span class="status-badge ${item.isCorrect ? 'status-completed' : 'status-not-started'}">
+                                  ${item.isCorrect ? 'Correct' : 'Incorrect'}
+                                </span>
+                              </div>
+                              <div class="muted" style="line-height:1.7;">
+                                <strong>Explanation:</strong> ${escapeHtml(explanationText)}
+                              </div>
+                            </div>
+                          `;
+                        }).join('')}
+                      </div>
+                    </div>`
+                  : ''
+              }
+            </div>
+          </section>`
+        : ''
+    }
+  `;
+}
   function renderQuizQuestions() {
     if (!state.selectedModuleQuiz) {
       return `<div class="empty-state">Select a module to see questions here.</div>`;
@@ -1536,16 +1739,26 @@ function renderDashboardPage() {
           updates.length
             ? `<div class="grid grid-2">
                 ${updates.map(function(item) {
-                  return `
-                    <div class="announcement ${escapeHtml(item.type || 'info')}">
-                      <div class="dot"></div>
-                      <div>
-                        <h4>${escapeHtml(item.title)}</h4>
-                        <p>${escapeHtml(item.message)}</p>
-                      </div>
-                    </div>
-                  `;
-                }).join('')}
+  return `
+    <div class="announcement ${escapeHtml(item.type || 'info')}">
+      <div class="dot"></div>
+      <div>
+        <h4>${escapeHtml(item.title)}</h4>
+        <p>${escapeHtml(item.message)}</p>
+
+        <div class="muted" style="margin-top:8px;font-size:12px;line-height:1.6;">
+          ${item.updateTopic ? `<strong>Topic:</strong> ${escapeHtml(item.updateTopic)}` : ''}
+          ${item.updateTopic && item.updateCategory ? ` &nbsp;•&nbsp; ` : ''}
+          ${item.updateCategory ? `<strong>Category:</strong> ${escapeHtml(item.updateCategory)}` : ''}
+          ${(item.updateTopic || item.updateCategory) && (item.updatedBy || item.updatedAt) ? `<br>` : ''}
+          ${item.updatedBy ? `<strong>Updated By:</strong> ${escapeHtml(item.updatedBy)}` : ''}
+          ${item.updatedBy && item.updatedAt ? ` &nbsp;•&nbsp; ` : ''}
+          ${item.updatedAt ? `<strong>Updated At:</strong> ${escapeHtml(item.updatedAt)}` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}).join('')}
               </div>`
             : `<div class="card empty-state">No updates available.</div>`
         }
@@ -1842,96 +2055,194 @@ function renderDashboardPage() {
   }
 
   function renderAdminPage() {
-    const snap = state.data.adminSnapshot || {};
+  const snap = state.data.adminSnapshot || {};
+  const modules = Array.isArray((state.data || {}).modules) ? state.data.modules : [];
 
-    return `
-      <div class="top-strip">
-        <div>
-          <h2 class="page-title">Admin</h2>
-          <p class="page-subtitle">Manage updates, users, and portal reports.</p>
+  return `
+    <div class="top-strip">
+      <div>
+        <h2 class="page-title">Admin</h2>
+        <p class="page-subtitle">Manage updates, users, portal reports, daily learning content, and quiz questions.</p>
+      </div>
+    </div>
+
+    <section class="grid grid-4">
+      <div class="card stat-card">
+        <div class="label">Modules</div>
+        <div class="value">${Number(snap.moduleCount) || 0}</div>
+      </div>
+      <div class="card stat-card">
+        <div class="label">Updates</div>
+        <div class="value">${Number(snap.updateCount) || 0}</div>
+      </div>
+      <div class="card stat-card">
+        <div class="label">Users</div>
+        <div class="value">${Number(snap.userCount) || 0}</div>
+      </div>
+      <div class="card stat-card">
+        <div class="label">Certificates</div>
+        <div class="value">${Number(snap.certificateCount) || 0}</div>
+      </div>
+    </section>
+
+    <div class="grid grid-2">
+      <div class="card">
+        <div class="pill">Add Update</div>
+        <input id="adminAnnouncementTitle" class="field" type="text" placeholder="Update title">
+        <textarea id="adminAnnouncementMessage" class="textarea" placeholder="Update message" style="margin-top:12px;"></textarea>
+
+        <select id="adminAnnouncementType" class="select" style="margin-top:12px;">
+          <option value="info">Info</option>
+          <option value="success">Success</option>
+          <option value="warning">Warning</option>
+          <option value="announcement">Announcement</option>
+        </select>
+
+        <input id="adminAnnouncementTopic" class="field" type="text" placeholder="Update topic (Quiz, Module, Learning, User, etc.)" style="margin-top:12px;">
+
+        <select id="adminAnnouncementCategory" class="select" style="margin-top:12px;">
+          <option value="Portal">Portal</option>
+          <option value="AdminLog">AdminLog</option>
+        </select>
+
+        <div class="lesson-actions" style="margin-top:14px;">
+          <button class="btn btn-primary" id="saveAnnouncementBtn">Save Update</button>
         </div>
       </div>
 
-      <section class="grid grid-4">
-        <div class="card stat-card">
-          <div class="label">Modules</div>
-          <div class="value">${Number(snap.moduleCount) || 0}</div>
-        </div>
-        <div class="card stat-card">
-          <div class="label">Updates</div>
-          <div class="value">${Number(snap.updateCount) || 0}</div>
-        </div>
-        <div class="card stat-card">
-          <div class="label">Users</div>
-          <div class="value">${Number(snap.userCount) || 0}</div>
-        </div>
-        <div class="card stat-card">
-          <div class="label">Certificates</div>
-          <div class="value">${Number(snap.certificateCount) || 0}</div>
-        </div>
-      </section>
-
-      <div class="grid grid-2">
-        <div class="card">
-          <div class="pill">Add Update</div>
-          <input id="adminAnnouncementTitle" class="field" type="text" placeholder="Update title">
-          <textarea id="adminAnnouncementMessage" class="textarea" placeholder="Update message" style="margin-top:12px;"></textarea>
-          <select id="adminAnnouncementType" class="select" style="margin-top:12px;">
-            <option value="info">Info</option>
-            <option value="success">Success</option>
-            <option value="warning">Warning</option>
-            <option value="announcement">Announcement</option>
-          </select>
-          <div class="lesson-actions" style="margin-top:14px;">
-            <button class="btn btn-primary" id="saveAnnouncementBtn">Save Update</button>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="pill">Add User</div>
-          <input id="adminUserEmail" class="field" type="email" placeholder="User email">
-          <input id="adminUserName" class="field" type="text" placeholder="User name" style="margin-top:12px;">
-          <select id="adminUserRole" class="select" style="margin-top:12px;">
-            <option value="Trainee">Trainee</option>
-            <option value="Trainer">Trainer</option>
-            <option value="Admin">Admin</option>
-            <option value="Manager">Manager</option>
-            <option value="Account Manager">Account Manager</option>
-            <option value="Recruiter">Recruiter</option>
-            <option value="Team Lead">Team Lead</option>
-            <option value="HR">HR</option>
-            <option value="Recruitment Specialist">Recruitment Specialist</option>
-          </select>
-          <div class="lesson-actions" style="margin-top:14px;">
-            <button class="btn btn-primary" id="saveUserBtn">Add User</button>
-          </div>
+      <div class="card">
+        <div class="pill">Add User</div>
+        <input id="adminUserEmail" class="field" type="email" placeholder="User email">
+        <input id="adminUserName" class="field" type="text" placeholder="User name" style="margin-top:12px;">
+        <select id="adminUserRole" class="select" style="margin-top:12px;">
+          <option value="Trainee">Trainee</option>
+          <option value="Trainer">Trainer</option>
+          <option value="Admin">Admin</option>
+          <option value="Director">Director</option>
+          <option value="Account Manager">Account Manager</option>
+          <option value="Manager">Manager</option>
+          <option value="Team Lead">Team Lead</option>
+          <option value="Recruiter">Recruiter</option>
+          <option value="Senior Recruiter">Senior Recruiter</option>
+          <option value="QA">QA</option>
+          <option value="Recruitment Specialist">Recruitment Specialist</option>
+          <option value="HR">HR</option>
+        </select>
+        <div class="lesson-actions" style="margin-top:14px;">
+          <button class="btn btn-primary" id="saveUserBtn">Add User</button>
         </div>
       </div>
+    </div>
 
-      <section class="section">
-        <div class="card">
-          <div class="top-strip" style="margin-bottom:12px;">
-            <div>
-              <div class="pill">Progress Report</div>
-              <h3 style="margin:0;">Trainee Report</h3>
-            </div>
-            <div class="toolbar">
-              <button class="btn btn-secondary" id="loadAdminReportBtn">Load Report</button>
-              ${
-                snap && snap.spreadsheetUrl
-                  ? `<a class="btn btn-primary" target="_blank" href="${escapeHtml(snap.spreadsheetUrl)}">Open Data Sheet</a>`
-                  : ''
-              }
-            </div>
+    <section class="section">
+      <div class="card">
+        <div class="pill">Add Daily Learning</div>
+
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div>
+            <select id="adminDailyLearningType" class="select">
+              <option value="Tip">Tip</option>
+              <option value="Vocabulary">Vocabulary</option>
+              <option value="Quote">Quote</option>
+              <option value="Quiz">Quiz</option>
+            </select>
+
+            <input id="adminDailyLearningTitle" class="field" type="text" placeholder="Title" style="margin-top:12px;">
+            <textarea id="adminDailyLearningContent" class="textarea" placeholder="Main content" style="margin-top:12px;"></textarea>
+            <input id="adminDailyLearningSubtext" class="field" type="text" placeholder="Subtext / author / supporting line" style="margin-top:12px;">
+            <input id="adminDailyLearningTag" class="field" type="text" placeholder="Tag" style="margin-top:12px;">
           </div>
 
-          <div id="adminReportContainer">
-            ${renderAdminReport()}
+          <div>
+            <input id="adminDailyLearningOptionA" class="field" type="text" placeholder="Option A (for Quiz)">
+            <input id="adminDailyLearningOptionB" class="field" type="text" placeholder="Option B (for Quiz)" style="margin-top:12px;">
+            <input id="adminDailyLearningOptionC" class="field" type="text" placeholder="Option C (for Quiz)" style="margin-top:12px;">
+            <input id="adminDailyLearningOptionD" class="field" type="text" placeholder="Option D (for Quiz)" style="margin-top:12px;">
+
+            <select id="adminDailyLearningCorrectOption" class="select" style="margin-top:12px;">
+              <option value="">Correct Option</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+            </select>
+
+            <input id="adminDailyLearningAudience" class="field" type="text" placeholder="Audience (All / Recruiter / HR)" style="margin-top:12px;">
+            <input id="adminDailyLearningXp" class="field" type="number" min="0" step="1" placeholder="XP" style="margin-top:12px;">
+            <input id="adminDailyLearningCardId" class="field" type="text" placeholder="Card ID (optional)" style="margin-top:12px;">
           </div>
         </div>
-      </section>
-    `;
-  }
+
+        <div class="lesson-actions" style="margin-top:14px;">
+          <button class="btn btn-primary" id="saveDailyLearningBtn">Save Daily Learning</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="card">
+        <div class="pill">Add Quiz</div>
+
+        <div class="grid grid-2" style="margin-top:14px;">
+          <div>
+            <select id="adminQuizModuleId" class="select">
+              <option value="">Select Module</option>
+              ${modules.map(function(module) {
+                return `<option value="${escapeHtml(module.id)}">${escapeHtml(module.id + ' - ' + module.title)}</option>`;
+              }).join('')}
+            </select>
+
+            <input id="adminQuizQuestionId" class="field" type="text" placeholder="Question ID" style="margin-top:12px;">
+            <textarea id="adminQuizQuestion" class="textarea" placeholder="Question" style="margin-top:12px;"></textarea>
+            <textarea id="adminQuizExplanation" class="textarea" placeholder="Explanation (optional)" style="margin-top:12px;"></textarea>
+          </div>
+
+          <div>
+            <input id="adminQuizOptionA" class="field" type="text" placeholder="Option A">
+            <input id="adminQuizOptionB" class="field" type="text" placeholder="Option B" style="margin-top:12px;">
+            <input id="adminQuizOptionC" class="field" type="text" placeholder="Option C" style="margin-top:12px;">
+            <input id="adminQuizOptionD" class="field" type="text" placeholder="Option D" style="margin-top:12px;">
+
+            <select id="adminQuizCorrectOption" class="select" style="margin-top:12px;">
+              <option value="">Correct Option</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="lesson-actions" style="margin-top:14px;">
+          <button class="btn btn-primary" id="saveQuizBtn">Save Quiz</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="card">
+        <div class="top-strip" style="margin-bottom:12px;">
+          <div>
+            <div class="pill">Progress Report</div>
+            <h3 style="margin:0;">Trainee Report</h3>
+          </div>
+          <div class="toolbar">
+            <button class="btn btn-secondary" id="loadAdminReportBtn">Load Report</button>
+            ${
+              snap && snap.spreadsheetUrl
+                ? `<a class="btn btn-primary" target="_blank" href="${escapeHtml(snap.spreadsheetUrl)}">Open Data Sheet</a>`
+                : ''
+            }
+          </div>
+        </div>
+
+        <div id="adminReportContainer">
+          ${renderAdminReport()}
+        </div>
+      </div>
+    </section>
+  `;
+}
 
   function renderAdminReport() {
     if (!state.adminReport.length) {
@@ -1971,42 +2282,95 @@ function renderDashboardPage() {
   }
 
   function renderChatbotWidget() {
-    const chatbotMessage =
-      ((state.data || {}).settings || {}).chatbotMessage ||
-      'Hi! I can answer questions using the AI Chatbot Knowledge sheet.';
+  const chatbotMessage =
+    ((state.data || {}).settings || {}).chatbotMessage ||
+    'Hi! I can help you with training, modules, updates, and process questions.';
 
-    ensureChatbotWelcomeMessage(chatbotMessage);
+  ensureChatbotWelcomeMessage(chatbotMessage);
 
-    return `
-      <div style="position:fixed;right:24px;bottom:24px;z-index:9999;">
-        ${state.chatbotOpen ? `
-          <div id="chatbotPanel" style="
-            width:360px;
+  var panelLeft = typeof state.chatbotPanelLeft === 'number' ? state.chatbotPanelLeft : null;
+  var panelTop = typeof state.chatbotPanelTop === 'number' ? state.chatbotPanelTop : null;
+
+  var panelStyle = state.chatbotOpen
+    ? (
+        panelLeft !== null && panelTop !== null
+          ? 'position:fixed;left:' + panelLeft + 'px;top:' + panelTop + 'px;right:auto;bottom:auto;'
+          : 'position:fixed;right:96px;bottom:24px;'
+      )
+    : '';
+
+  return `
+    <div
+      id="chatbotLauncher"
+      style="
+        position:fixed;
+        right:24px;
+        bottom:24px;
+        z-index:9999;
+      "
+    >
+      ${state.chatbotOpen ? `
+        <div
+          id="chatbotPanel"
+          style="
+            ${panelStyle}
+            width:380px;
             max-width:calc(100vw - 24px);
-            height:520px;
-            max-height:calc(100vh - 110px);
+            height:560px;
+            max-height:calc(100vh - 24px);
             background:#ffffff;
-            border-radius:22px;
-            box-shadow:0 18px 48px rgba(15,79,134,0.22);
+            border-radius:24px;
+            box-shadow:0 20px 52px rgba(15,79,134,0.22);
             border:1px solid #e6eef6;
             overflow:hidden;
-            margin-bottom:12px;
             display:flex;
             flex-direction:column;
-          ">
-            
-            <div style="
-              background:#0f4f86;
+            z-index:9998;
+          "
+        >
+          <div
+            id="chatbotPanelHeader"
+            style="
+              background:linear-gradient(135deg,#0f4f86 0%, #1868a8 100%);
               color:#ffffff;
               padding:14px 16px;
               font-weight:700;
               display:flex;
               justify-content:space-between;
               align-items:center;
-            ">
-              <div>
-                <div style="font-size:15px;font-weight:700;">AI Assistant</div>
+              gap:12px;
+              cursor:move;
+              user-select:none;
+            "
+          >
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+              <div style="
+                width:38px;
+                height:38px;
+                border-radius:999px;
+                background:rgba(255,255,255,0.18);
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                font-size:20px;
+                flex:0 0 auto;
+              ">👩‍⚕️</div>
+
+              <div style="min-width:0;">
+                <div style="font-size:15px;font-weight:700;line-height:1.2;">FCH Assist</div>
+                <div style="font-size:12px;opacity:0.88;line-height:1.2;">Training help, step-by-step guidance, and quick answers</div>
               </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;flex:0 0 auto;">
+              <button
+                type="button"
+                id="chatbotResetPositionBtn"
+                aria-label="Reset chatbot position"
+                title="Reset position"
+                style="background:transparent;border:none;color:#fff;font-size:16px;cursor:pointer;line-height:1;"
+              >⤢</button>
+
               <button
                 type="button"
                 onclick="toggleChatbot()"
@@ -2014,148 +2378,218 @@ function renderDashboardPage() {
                 style="background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;"
               >×</button>
             </div>
+          </div>
 
-            <div id="chatbotMessages" style="
-              flex:1;
-              overflow-y:auto;
-              padding:14px;
-              background:linear-gradient(180deg,#f8fbff 0%, #ffffff 100%);
-            ">
-              ${renderChatbotMessages()}
-              ${state.chatbotLoading ? `
-                <div style="display:flex;justify-content:flex-start;margin-top:10px;">
+          <div id="chatbotMessages" style="
+            flex:1;
+            overflow-y:auto;
+            padding:14px;
+            background:linear-gradient(180deg,#f8fbff 0%, #ffffff 100%);
+          ">
+            ${renderChatbotMessages()}
+            ${state.chatbotLoading ? `
+              <div style="display:flex;justify-content:flex-start;margin-top:10px;">
+                <div style="display:flex;align-items:flex-start;gap:8px;max-width:90%;">
                   <div style="
-                    max-width:86%;
+                    width:28px;
+                    height:28px;
+                    border-radius:999px;
+                    background:#e7f1fa;
+                    color:#0f4f86;
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    font-size:15px;
+                    flex:0 0 auto;
+                    margin-top:2px;
+                  ">👩‍⚕️</div>
+
+                  <div style="
                     background:#eef5fb;
                     color:#35556e;
                     border:1px solid #dbe8f3;
                     border-radius:16px 16px 16px 4px;
                     padding:10px 12px;
                     font-size:14px;
+                    line-height:1.5;
                   ">
-                    Searching knowledge...
+                    Typing...
                   </div>
                 </div>
-              ` : ''}
-            </div>
-
-            <div style="
-              border-top:1px solid #e6eef6;
-              background:#ffffff;
-              padding:12px;
-            ">
-              <form id="chatbotForm" style="display:block;">
-                <div style="
-                  display:flex;
-                  align-items:flex-end;
-                  gap:8px;
-                  border:1px solid #d8e5f0;
-                  border-radius:18px;
-                  padding:8px;
-                  background:#ffffff;
-                  box-shadow:inset 0 1px 2px rgba(15,79,134,0.04);
-                ">
-                  <textarea
-                    id="chatbotInput"
-                    placeholder="How can I help you..."
-                    style="
-                      flex:1;
-                      min-height:44px;
-                      max-height:120px;
-                      resize:none;
-                      border:none;
-                      outline:none;
-                      padding:10px 12px;
-                      background:transparent;
-                      font:inherit;
-                      line-height:1.45;
-                    "
-                  >${escapeHtml(state.chatbotInputDraft || '')}</textarea>
-
-                  <button
-                    type="submit"
-                    id="chatbotSendBtn"
-                    aria-label="Send message"
-                    title="Send"
-                    style="
-                      width:42px;
-                      height:42px;
-                      border:none;
-                      border-radius:999px;
-                      background:${state.chatbotLoading ? '#9db8cf' : '#0f4f86'};
-                      color:#ffffff;
-                      display:flex;
-                      align-items:center;
-                      justify-content:center;
-                      cursor:${state.chatbotLoading ? 'not-allowed' : 'pointer'};
-                      flex:0 0 auto;
-                      font-size:18px;
-                      font-weight:700;
-                    "
-                    ${state.chatbotLoading ? 'disabled' : ''}
-                  >
-                    △
-                  </button>
-                </div>
-              </form>
-            </div>
+              </div>
+            ` : ''}
           </div>
-        ` : ''}
 
-        <button
-          id="chatbotFab"
-          type="button"
-          onclick="toggleChatbot()"
-          aria-label="Open AI assistant"
-          style="
-            width:58px;
-            height:58px;
-            border:none;
-            border-radius:999px;
-            background:#0f4f86;
-            color:#fff;
-            font-size:22px;
-            cursor:pointer;
-            box-shadow:0 12px 32px rgba(15,79,134,0.28);
-          "
-        >
-          🤖
-        </button>
+          <div style="
+            border-top:1px solid #e6eef6;
+            background:#ffffff;
+            padding:12px;
+          ">
+            <form id="chatbotForm" style="display:block;">
+              <div style="
+                display:flex;
+                align-items:flex-end;
+                gap:8px;
+                border:1px solid #d8e5f0;
+                border-radius:18px;
+                padding:8px;
+                background:#ffffff;
+                box-shadow:inset 0 1px 2px rgba(15,79,134,0.04);
+              ">
+                <textarea
+                  id="chatbotInput"
+                  placeholder="Ask FCH Assist anything..."
+                  style="
+                    flex:1;
+                    min-height:44px;
+                    max-height:120px;
+                    resize:none;
+                    border:none;
+                    outline:none;
+                    padding:10px 12px;
+                    background:transparent;
+                    font:inherit;
+                    line-height:1.45;
+                  "
+                >${escapeHtml(state.chatbotInputDraft || '')}</textarea>
+
+                <button
+                  type="submit"
+                  id="chatbotSendBtn"
+                  aria-label="Send message"
+                  title="Send"
+                  style="
+                    width:42px;
+                    height:42px;
+                    border:none;
+                    border-radius:999px;
+                    background:${state.chatbotLoading ? '#9db8cf' : '#0f4f86'};
+                    color:#ffffff;
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    cursor:${state.chatbotLoading ? 'not-allowed' : 'pointer'};
+                    flex:0 0 auto;
+                    font-size:18px;
+                    font-weight:700;
+                  "
+                  ${state.chatbotLoading ? 'disabled' : ''}
+                >
+                  ➤
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ` : ''}
+
+      <button
+        id="chatbotFab"
+        type="button"
+        onclick="toggleChatbot()"
+        aria-label="Open FCH Assist"
+        title="${state.chatbotOpen ? 'Close FCH Assist' : 'Open FCH Assist'}"
+        style="
+          width:60px;
+          height:60px;
+          border:none;
+          border-radius:999px;
+          background:linear-gradient(135deg,#0f4f86 0%, #1868a8 100%);
+          color:#fff;
+          font-size:24px;
+          cursor:pointer;
+          box-shadow:0 12px 32px rgba(15,79,134,0.28);
+          position:relative;
+          z-index:9999;
+        "
+      >
+        👩‍⚕️
+      </button>
+    </div>
+  `;
+}
+function handleSuggestionClick(text, moduleId) {
+  const input = document.getElementById('chatbotInput');
+  if (!input) return;
+
+  if (String(text || '').toLowerCase().includes('open') && moduleId) {
+    openSpecificModuleFromChatbot(moduleId);
+    return;
+  }
+
+  input.value = text;
+
+  const sendBtn = document.getElementById('chatbotSendBtn');
+  if (sendBtn) {
+    sendBtn.click();
+  }
+}
+  function renderChatbotMessages() {
+  if (!state.chatbotMessages.length) {
+    return `
+      <div style="text-align:center;padding:18px 12px;color:#6a8093;font-size:14px;">
+        Start a conversation with FCH Assist.
       </div>
     `;
   }
 
-  function renderChatbotMessages() {
-    if (!state.chatbotMessages.length) {
+  return state.chatbotMessages.map(function(message) {
+    const isUser = message.role === 'user';
+    const safeSuggestions = !isUser
+      ? renderChatbotSuggestions(message.suggestions, message.moduleId)
+      : '';
+
+    if (isUser) {
       return `
-        <div style="text-align:center;padding:18px 12px;color:#6a8093;font-size:14px;">
-          Start a conversation with the assistant.
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+          <div style="
+            max-width:86%;
+            padding:12px 14px;
+            border-radius:16px 16px 4px 16px;
+            background:#0f4f86;
+            color:#ffffff;
+            box-shadow:0 8px 20px rgba(15,79,134,0.16);
+          ">
+            <div style="font-size:14px;line-height:1.6;white-space:pre-wrap;">${formatChatMessageText(message.text)}</div>
+          </div>
         </div>
       `;
     }
 
-    return state.chatbotMessages.map(function(message) {
-      const isUser = message.role === 'user';
-
-      return `
-        <div style="display:flex;justify-content:${isUser ? 'flex-end' : 'flex-start'};margin-bottom:10px;">
+    return `
+      <div style="display:flex;justify-content:flex-start;margin-bottom:10px;">
+        <div style="display:flex;align-items:flex-start;gap:8px;max-width:92%;">
           <div style="
-            max-width:86%;
+            width:28px;
+            height:28px;
+            border-radius:999px;
+            background:#e7f1fa;
+            color:#0f4f86;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:15px;
+            flex:0 0 auto;
+            margin-top:2px;
+          ">👩‍⚕️</div>
+
+          <div style="
+            max-width:100%;
             padding:12px 14px;
-            border-radius:${isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px'};
-            background:${isUser ? '#0f4f86' : '#eef5fb'};
-            color:${isUser ? '#ffffff' : '#244258'};
-            border:${isUser ? 'none' : '1px solid #dbe8f3'};
-            box-shadow:${isUser ? '0 8px 20px rgba(15,79,134,0.16)' : 'none'};
+            border-radius:16px 16px 16px 4px;
+            background:#eef5fb;
+            color:#244258;
+            border:1px solid #dbe8f3;
           ">
-            <div style="font-size:14px;line-height:1.6;white-space:pre-wrap;">${formatChatMessageText(message.text)}</div>
-            ${!isUser ? renderChatbotLinks(message.links) : ''}
+            <div style="font-size:14px;line-height:1.65;white-space:pre-wrap;">${formatChatMessageText(message.text)}</div>
+            ${renderChatbotLinks(message.links)}
+            ${safeSuggestions}
           </div>
         </div>
-      `;
-    }).join('');
-  }
-
+      </div>
+    `;
+  }).join('');
+}
   function renderChatbotLinks(links) {
     if (!Array.isArray(links) || !links.length) {
       return '';
@@ -2198,24 +2632,30 @@ function renderDashboardPage() {
   }
 
   function formatChatMessageText(text) {
-    return escapeHtml(text || '');
-  }
+  return String(text || '')
+    .split('\n')
+    .map(function(line) {
+      return escapeHtml(line);
+    })
+    .join('\n');
+}
 
   function ensureChatbotWelcomeMessage(chatbotMessage) {
-    if (state.chatbotInitialized) {
-      return;
-    }
-
-    state.chatbotMessages = [
-      {
-        role: 'assistant',
-        text: chatbotMessage,
-        links: []
-      }
-    ];
-
-    state.chatbotInitialized = true;
+  if (state.chatbotInitialized) {
+    return;
   }
+
+  state.chatbotMessages = [
+    {
+      role: 'assistant',
+      text: 'Hi 👋 I’m FCH Buddy.\n\nAsk me anything about your training and I’ll help you with step-by-step guidance.',
+      links: [],
+      suggestions: []
+    }
+  ];
+
+  state.chatbotInitialized = true;
+}
 
   function toggleChatbot() {
     state.chatbotOpen = !state.chatbotOpen;
@@ -2398,112 +2838,256 @@ function renderDashboardPage() {
       })
       .updateUserActivity();
   }
-
-  function bindChatbotActions() {
-    const form = document.getElementById('chatbotForm');
-    const input = document.getElementById('chatbotInput');
-
-    if (!form || !input) {
-      return;
-    }
-
-    input.addEventListener('input', function() {
-      state.chatbotInputDraft = this.value || '';
-    });
-
-    form.addEventListener('submit', function(event) {
-      event.preventDefault();
-      handleChatbotSubmit();
-    });
-
-    input.addEventListener('keydown', function(event) {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        handleChatbotSubmit();
-      }
-    });
-
-    scrollChatbotToBottom();
+function startChatbotPanelDrag(event) {
+  var panel = document.getElementById('chatbotPanel');
+  if (!panel) {
+    return;
   }
 
-  function handleChatbotSubmit() {
-    if (state.chatbotLoading) {
-      return;
-    }
+  if (event.target && event.target.closest('button')) {
+    return;
+  }
 
-    const input = document.getElementById('chatbotInput');
-    const question = input ? (input.value || '').trim() : '';
+  var rect = panel.getBoundingClientRect();
 
-    if (!question) {
-      showToast('Please enter a question.');
-      return;
-    }
+  state.chatbotDragActive = true;
+  state.chatbotDragOffsetX = event.clientX - rect.left;
+  state.chatbotDragOffsetY = event.clientY - rect.top;
 
-    state.chatbotMessages.push({
-      role: 'user',
-      text: question,
-      links: []
+  event.preventDefault();
+}
+function handleChatbotPanelDragMove(event) {
+  if (!state.chatbotDragActive) {
+    return;
+  }
+
+  var nextLeft = event.clientX - Number(state.chatbotDragOffsetX || 0);
+  var nextTop = event.clientY - Number(state.chatbotDragOffsetY || 0);
+
+  applyChatbotPanelPosition(nextLeft, nextTop);
+}
+function stopChatbotPanelDrag() {
+  state.chatbotDragActive = false;
+  state.chatbotDragOffsetX = 0;
+  state.chatbotDragOffsetY = 0;
+}
+  function bindChatbotActions() {
+  const form = document.getElementById('chatbotForm');
+  const input = document.getElementById('chatbotInput');
+  const header = document.getElementById('chatbotPanelHeader');
+  const resetBtn = document.getElementById('chatbotResetPositionBtn');
+
+  document.removeEventListener('mousemove', handleChatbotPanelDragMove);
+  document.removeEventListener('mouseup', stopChatbotPanelDrag);
+
+  document.addEventListener('mousemove', handleChatbotPanelDragMove);
+  document.addEventListener('mouseup', stopChatbotPanelDrag);
+
+  if (header) {
+    header.removeEventListener('mousedown', startChatbotPanelDrag);
+    header.addEventListener('mousedown', startChatbotPanelDrag);
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      resetChatbotPanelPosition();
     });
+  }
 
-    state.chatbotInputDraft = '';
-    state.chatbotLoading = true;
+  if (!form || !input) {
+    return;
+  }
 
-    renderApp();
-    scrollChatbotToBottom();
+  input.addEventListener('input', function() {
+    state.chatbotInputDraft = this.value || '';
+  });
 
-    google.script.run
-      .withSuccessHandler(function(response) {
-        let assistantText = 'Sorry, I could not find a grounded answer for that question.';
-        let assistantLinks = [];
+  form.addEventListener('submit', function(event) {
+    event.preventDefault();
+    handleChatbotSubmit();
+  });
 
-        if (response && typeof response === 'object') {
-          if (response.answer) {
-            assistantText = String(response.answer);
-          }
-          if (Array.isArray(response.suggestions) && response.suggestions.length) {
-            assistantText += '\n\nTry asking:\n- ' + response.suggestions.join('\n- ');
-          }
+  input.addEventListener('keydown', function(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      handleChatbotSubmit();
+    }
+  });
 
-          if (Array.isArray(response.links)) {
-            assistantLinks = response.links
-              .filter(function(link) {
-                return link && link.title && link.url;
-              })
-              .map(function(link) {
-                return {
-                  title: String(link.title),
-                  url: String(link.url)
-                };
-              });
-          }
-        } else if (typeof response === 'string' && response.trim()) {
-          assistantText = response.trim();
+  scrollChatbotToBottom();
+  bindChatbotSuggestionActions();
+}
+function applyChatbotPanelPosition(left, top) {
+  var panel = document.getElementById('chatbotPanel');
+  if (!panel) {
+    return;
+  }
+
+  var panelWidth = panel.offsetWidth || 380;
+  var panelHeight = panel.offsetHeight || 560;
+  var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  var margin = 12;
+
+  var minLeft = margin;
+  var maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+  var minTop = margin;
+  var maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+
+  var safeLeft = Math.min(Math.max(left, minLeft), maxLeft);
+  var safeTop = Math.min(Math.max(top, minTop), maxTop);
+
+  state.chatbotPanelLeft = safeLeft;
+  state.chatbotPanelTop = safeTop;
+
+  panel.style.left = safeLeft + 'px';
+  panel.style.top = safeTop + 'px';
+  panel.style.right = 'auto';
+  panel.style.bottom = 'auto';
+}
+function resetChatbotPanelPosition() {
+  state.chatbotPanelLeft = null;
+  state.chatbotPanelTop = null;
+
+  var panel = document.getElementById('chatbotPanel');
+  if (!panel) {
+    return;
+  }
+
+  panel.style.left = 'auto';
+  panel.style.top = 'auto';
+  panel.style.right = '96px';
+  panel.style.bottom = '24px';
+}
+  function handleChatbotSubmit() {
+  if (state.chatbotLoading) {
+    return;
+  }
+
+  const input = document.getElementById('chatbotInput');
+  const question = input ? (input.value || '').trim() : '';
+
+  if (!question) {
+    showToast('Please enter a question.');
+    return;
+  }
+
+  state.chatbotMessages.push({
+    role: 'user',
+    text: question,
+    links: [],
+    suggestions: [],
+    moduleId: ''
+  });
+
+  state.chatbotInputDraft = '';
+  state.chatbotLoading = true;
+
+  renderApp();
+  scrollChatbotToBottom();
+
+  google.script.run
+    .withSuccessHandler(function(response) {
+      var safeResponse = response || {};
+      var responseOk = safeResponse.ok !== false;
+
+      var assistantLinks = Array.isArray(safeResponse.links)
+        ? safeResponse.links.filter(function(link) {
+            return link && link.title && link.url;
+          }).map(function(link) {
+            return {
+              title: String(link.title || '').trim(),
+              url: String(link.url || '').trim()
+            };
+          })
+        : [];
+
+      var assistantSuggestions = normalizeAssistantSuggestions_(
+        safeResponse.suggestions,
+        question,
+        {
+          mainQuestion: safeResponse.matchedQuestion || '',
+          answer: safeResponse.answer || ''
         }
+      );
 
+      var fallbackErrorText = responseOk
+        ? 'I could not find a clear answer for that yet.'
+        : 'Sorry, I could not load the grounded answer right now. Please try again.';
+
+      var assistantText = buildFrontendAssistantText_(
+        safeResponse.answer
+          ? String(safeResponse.answer)
+          : fallbackErrorText
+      );
+
+      window.setTimeout(function() {
         state.chatbotMessages.push({
           role: 'assistant',
           text: assistantText,
-          links: assistantLinks
+          links: assistantLinks,
+          suggestions: assistantSuggestions,
+          moduleId: String(safeResponse.moduleId || '').trim()
         });
 
         state.chatbotLoading = false;
         renderApp();
         scrollChatbotToBottom();
-      })
-      .withFailureHandler(function(err) {
+
+        if (!responseOk) {
+          showToast('Chatbot response issue. Please try again.');
+        }
+      }, 800);
+    })
+    .withFailureHandler(function(error) {
+      var fallbackText = buildFrontendAssistantText_(
+        'Sorry, I could not connect to the assistant right now. Please try again in a moment.'
+      );
+
+      window.setTimeout(function() {
         state.chatbotMessages.push({
           role: 'assistant',
-          text: 'Sorry, the assistant could not respond right now. ' + getErrorMessage(err),
-          links: []
+          text: fallbackText,
+          links: [],
+          suggestions: [],
+          moduleId: ''
         });
 
         state.chatbotLoading = false;
         renderApp();
         scrollChatbotToBottom();
-      })
-      .askAssistant(question);
-  }
+        showToast(getErrorMessage(error) || 'Chatbot request failed.');
+      }, 800);
+    })
+    .askAssistant(question);
+}
+function getRandomAssistantGreeting_() {
+  var options = [
+    'Hi! 👩‍⚕️',
+    'Hello! 👩‍⚕️',
+    'Hey there! 👩‍⚕️',
+    'Got it. 👩‍⚕️'
+  ];
+  return options[Math.floor(Math.random() * options.length)];
+}
+function getRandomAssistantClosing_() {
+  var options = [
+    'Want me to show the module?',
+    'Need step-by-step help?',
+    'I can help you with the next step too.',
+    'Ask me another training question anytime.'
+  ];
+  return options[Math.floor(Math.random() * options.length)];
+}
+function buildAssistantDisplayText_(answer) {
+  var greeting = getRandomAssistantGreeting_();
+  var body = formatAssistantAnswerForChat_(answer);
+  var closing = getRandomAssistantClosing_();
 
+  return [greeting, '', body, '', closing].join('\n');
+}
   function scrollChatbotToBottom() {
     window.setTimeout(function() {
       const box = document.getElementById('chatbotMessages');
@@ -2512,7 +3096,116 @@ function renderDashboardPage() {
       }
     }, 0);
   }
+function formatAssistantAnswerForChat_(answer) {
+  var cleaned = String(answer || '')
+    .replace(/\r/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
+  if (!cleaned) {
+    return 'I could not find a clear answer for that yet.';
+  }
+
+  return breakAssistantTextIntoLines_(cleaned);
+}
+function breakAssistantTextIntoLines_(text) {
+  var normalized = String(text || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\.\s+/g, '.\n')
+    .replace(/\?\s+/g, '?\n')
+    .replace(/\!\s+/g, '!\n')
+    .trim();
+
+  var parts = normalized
+    .split('\n')
+    .map(function(part) {
+      return String(part || '').trim();
+    })
+    .filter(Boolean);
+
+  if (!parts.length) {
+    return '';
+  }
+
+  var compact = [];
+  var current = '';
+
+  parts.forEach(function(part) {
+    if (!current) {
+      current = part;
+      return;
+    }
+
+    if ((current + ' ' + part).length <= 120) {
+      current += ' ' + part;
+    } else {
+      compact.push(current);
+      current = part;
+    }
+  });
+
+  if (current) {
+    compact.push(current);
+  }
+
+  if (compact.length > 4) {
+    return compact.slice(0, 4).join('\n');
+  }
+
+  return compact.join('\n');
+}
+function normalizeAssistantSuggestions_(suggestions, rawQuestion, match) {
+  return [];
+}
+function renderChatbotSuggestions(suggestions, moduleId) {
+  if (!Array.isArray(suggestions) || !suggestions.length) {
+    return '';
+  }
+
+  return `
+    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">
+      ${suggestions.map(function(s) {
+        var safeLabel = String(s || '');
+        var safeText = safeLabel.replace(/'/g, "\\'");
+        return `
+          <button
+            type="button"
+            style="
+              padding:6px 10px;
+              font-size:12px;
+              border-radius:999px;
+              border:1px solid #dbe8f3;
+              background:#ffffff;
+              cursor:pointer;
+            "
+            onclick="handleSuggestionClick('${safeText}', '${String(moduleId || '').replace(/'/g, "\\'")}')"
+          >
+            ${safeLabel}
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+function bindChatbotSuggestionActions() {
+  document.querySelectorAll('.chatbot-suggestion-chip').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (state.chatbotLoading) {
+        return;
+      }
+
+      var moduleId = String(this.getAttribute('data-module-id') || '').trim();
+
+      if (moduleId) {
+        openSpecificModuleFromChatbot(moduleId);
+        return;
+      }
+    });
+  });
+}
+function buildFrontendAssistantText_(text) {
+  return breakAssistantTextIntoLines_(String(text || '').trim());
+}
   function bindMenu() {
     document.querySelectorAll('.menu-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -2552,6 +3245,93 @@ function renderDashboardPage() {
       });
   }
 
+  function hideLessonPreviewBox(box) {
+    if (!box) return;
+    box.style.display = 'none';
+  }
+
+  function showLessonPreviewBox(box) {
+    if (!box) return;
+    box.style.display = 'block';
+  }
+
+  function closeSiblingPreviewBoxes(currentBox) {
+    if (!currentBox) return;
+
+    const lessonRow = currentBox.closest('.lesson-row');
+    if (!lessonRow) return;
+
+    lessonRow.querySelectorAll('.lesson-preview-box').forEach(function(box) {
+      if (box !== currentBox) {
+        hideLessonPreviewBox(box);
+      }
+    });
+  }
+
+  document.querySelectorAll('.video-progress-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const moduleId = this.getAttribute('data-module-id');
+      const lessonName = this.getAttribute('data-lesson-name');
+      const targetId = this.getAttribute('data-target-id');
+      const visualFileId = this.getAttribute('data-visual-file-id') || '';
+      const videoBox = targetId ? document.getElementById(targetId) : null;
+
+      setActiveTrainingVisual(moduleId, visualFileId, lessonName);
+
+      if (videoBox) {
+        const isHidden = videoBox.style.display === 'none' || videoBox.style.display === '';
+
+        if (isHidden) {
+          closeSiblingPreviewBoxes(videoBox);
+          showLessonPreviewBox(videoBox);
+        } else {
+          hideLessonPreviewBox(videoBox);
+        }
+      }
+
+      markLessonInProgress(moduleId, lessonName);
+    });
+  });
+
+  document.querySelectorAll('.resource-progress-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const moduleId = this.getAttribute('data-module-id');
+      const lessonName = this.getAttribute('data-lesson-name');
+      const targetId = this.getAttribute('data-target-id');
+      const pdfUrl = this.getAttribute('data-pdf-url') || '';
+      const inlinePdfContainerId = this.getAttribute('data-inline-pdf-container-id') || '';
+      const visualFileId = this.getAttribute('data-visual-file-id') || '';
+      const resourceBox = targetId ? document.getElementById(targetId) : null;
+
+      setActiveTrainingVisual(moduleId, visualFileId, lessonName);
+
+      if (resourceBox) {
+        const isHidden = resourceBox.style.display === 'none' || resourceBox.style.display === '';
+
+        if (isHidden) {
+          closeSiblingPreviewBoxes(resourceBox);
+          showLessonPreviewBox(resourceBox);
+
+          if (pdfUrl && inlinePdfContainerId) {
+            loadPdfIntoContainer(pdfUrl, inlinePdfContainerId);
+          }
+        } else {
+          hideLessonPreviewBox(resourceBox);
+        }
+      }
+
+      markLessonInProgress(moduleId, lessonName);
+    });
+  });
+
+  document.querySelectorAll('.resource-expand-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const resourceUrl = this.getAttribute('data-resource-url') || '';
+      const resourceTitle = this.getAttribute('data-resource-title') || 'Resource Preview';
+      openResourceModal(resourceUrl, resourceTitle);
+    });
+  });
+}
   function hideLessonPreviewBox(box) {
     if (!box) return;
     box.style.display = 'none';
@@ -3021,62 +3801,135 @@ function renderDashboardPage() {
   }
 
   function bindAdminActions() {
-    const saveAnnouncementBtn = document.getElementById('saveAnnouncementBtn');
-    const saveUserBtn = document.getElementById('saveUserBtn');
-    const loadReportBtn = document.getElementById('loadAdminReportBtn');
+  const saveAnnouncementBtn = document.getElementById('saveAnnouncementBtn');
+  const saveUserBtn = document.getElementById('saveUserBtn');
+  const saveDailyLearningBtn = document.getElementById('saveDailyLearningBtn');
+  const saveQuizBtn = document.getElementById('saveQuizBtn');
+  const loadAdminReportBtn = document.getElementById('loadAdminReportBtn');
 
-    if (saveAnnouncementBtn) {
-      saveAnnouncementBtn.addEventListener('click', function() {
-        const title = getValue('adminAnnouncementTitle');
-        const message = getValue('adminAnnouncementMessage');
-        const type = getValue('adminAnnouncementType');
+  if (saveAnnouncementBtn) {
+    saveAnnouncementBtn.addEventListener('click', function() {
+      const title = (document.getElementById('adminAnnouncementTitle') || {}).value || '';
+      const message = (document.getElementById('adminAnnouncementMessage') || {}).value || '';
+      const type = (document.getElementById('adminAnnouncementType') || {}).value || 'info';
+      const updateTopic = (document.getElementById('adminAnnouncementTopic') || {}).value || '';
+      const updateCategory = (document.getElementById('adminAnnouncementCategory') || {}).value || 'Portal';
 
-        google.script.run
-          .withSuccessHandler(function(updates) {
-            state.data.updates = updates || [];
-            showToast('Update added successfully.');
-            refreshPortalStateAfterServerAction();
-          })
-          .withFailureHandler(function(err) {
-            showToast('Failed to add update: ' + getErrorMessage(err));
-          })
-          .addUpdate({ title: title, message: message, type: type });
-      });
-    }
-
-    if (saveUserBtn) {
-      saveUserBtn.addEventListener('click', function() {
-        const email = getValue('adminUserEmail');
-        const name = getValue('adminUserName');
-        const role = getValue('adminUserRole');
-
-        google.script.run
-          .withSuccessHandler(function() {
-            showToast('User added successfully.');
-            refreshPortalStateAfterServerAction();
-          })
-          .withFailureHandler(function(err) {
-            showToast('Failed to add user: ' + getErrorMessage(err));
-          })
-          .addUser({ email: email, name: name, role: role });
-      });
-    }
-
-    if (loadReportBtn) {
-      loadReportBtn.addEventListener('click', function() {
-        google.script.run
-          .withSuccessHandler(function(report) {
-            state.adminReport = report || [];
-            const box = document.getElementById('adminReportContainer');
-            if (box) box.innerHTML = renderAdminReport();
-          })
-          .withFailureHandler(function(err) {
-            showToast('Failed to load report: ' + getErrorMessage(err));
-          })
-          .getAdminUserProgressReport();
-      });
-    }
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Update added successfully.');
+          refreshPortalStateAfterServerAction();
+        })
+        .withFailureHandler(function(err) {
+          showToast(getErrorMessage(err));
+        })
+        .addUpdate({
+          title: title,
+          message: message,
+          type: type,
+          updateTopic: updateTopic,
+          updateCategory: updateCategory
+        });
+    });
   }
+
+  if (saveUserBtn) {
+    saveUserBtn.addEventListener('click', function() {
+      const email = (document.getElementById('adminUserEmail') || {}).value || '';
+      const name = (document.getElementById('adminUserName') || {}).value || '';
+      const role = (document.getElementById('adminUserRole') || {}).value || 'Trainee';
+
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('User added successfully.');
+          refreshPortalStateAfterServerAction();
+        })
+        .withFailureHandler(function(err) {
+          showToast(getErrorMessage(err));
+        })
+        .addUser({
+          email: email,
+          name: name,
+          role: role
+        });
+    });
+  }
+
+  if (saveDailyLearningBtn) {
+    saveDailyLearningBtn.addEventListener('click', function() {
+      const payload = {
+        type: (document.getElementById('adminDailyLearningType') || {}).value || 'Tip',
+        title: (document.getElementById('adminDailyLearningTitle') || {}).value || '',
+        content: (document.getElementById('adminDailyLearningContent') || {}).value || '',
+        subtext: (document.getElementById('adminDailyLearningSubtext') || {}).value || '',
+        tag: (document.getElementById('adminDailyLearningTag') || {}).value || '',
+        optionA: (document.getElementById('adminDailyLearningOptionA') || {}).value || '',
+        optionB: (document.getElementById('adminDailyLearningOptionB') || {}).value || '',
+        optionC: (document.getElementById('adminDailyLearningOptionC') || {}).value || '',
+        optionD: (document.getElementById('adminDailyLearningOptionD') || {}).value || '',
+        correctOption: (document.getElementById('adminDailyLearningCorrectOption') || {}).value || '',
+        audience: (document.getElementById('adminDailyLearningAudience') || {}).value || 'All',
+        xp: (document.getElementById('adminDailyLearningXp') || {}).value || '5',
+        cardId: (document.getElementById('adminDailyLearningCardId') || {}).value || ''
+      };
+
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Daily Learning item added successfully.');
+          refreshPortalStateAfterServerAction();
+        })
+        .withFailureHandler(function(err) {
+          showToast(getErrorMessage(err));
+        })
+        .addDailyLearningItem(payload);
+    });
+  }
+
+  if (saveQuizBtn) {
+    saveQuizBtn.addEventListener('click', function() {
+      const payload = {
+        moduleId: (document.getElementById('adminQuizModuleId') || {}).value || '',
+        questionId: (document.getElementById('adminQuizQuestionId') || {}).value || '',
+        question: (document.getElementById('adminQuizQuestion') || {}).value || '',
+        optionA: (document.getElementById('adminQuizOptionA') || {}).value || '',
+        optionB: (document.getElementById('adminQuizOptionB') || {}).value || '',
+        optionC: (document.getElementById('adminQuizOptionC') || {}).value || '',
+        optionD: (document.getElementById('adminQuizOptionD') || {}).value || '',
+        correctOption: (document.getElementById('adminQuizCorrectOption') || {}).value || '',
+        explanation: (document.getElementById('adminQuizExplanation') || {}).value || ''
+      };
+
+      google.script.run
+        .withSuccessHandler(function() {
+          showToast('Quiz question added successfully.');
+          refreshPortalStateAfterServerAction();
+        })
+        .withFailureHandler(function(err) {
+          showToast(getErrorMessage(err));
+        })
+        .addQuizQuestion(payload);
+    });
+  }
+
+  if (loadAdminReportBtn) {
+    loadAdminReportBtn.addEventListener('click', function() {
+      google.script.run
+        .withSuccessHandler(function(rows) {
+          state.adminReport = Array.isArray(rows) ? rows : [];
+          state.adminLoaded = true;
+
+          const container = document.getElementById('adminReportContainer');
+          if (container) {
+            container.innerHTML = renderAdminReport();
+          }
+        })
+        .withFailureHandler(function(err) {
+          showToast(getErrorMessage(err));
+        })
+        .getAdminUserProgressReport();
+    });
+  }
+}
 
   function refreshPortalStateAfterServerAction() {
     google.script.run
@@ -3205,7 +4058,297 @@ function applyPageSwitchUi_() {
     if (val === 'in progress') return 'status-in-progress';
     return 'status-not-started';
   }
+function renderDailyLearningCompletionBanner(meta) {
+  if (!meta || !meta.todayCompleted) return '';
 
+  return `
+    <div
+      id="dailyLearningCompletionBanner"
+      style="
+        margin-top:14px;
+        border:1px solid #d7eadf;
+        background:linear-gradient(135deg,#edf9f2 0%, #ffffff 100%);
+        border-radius:18px;
+        padding:16px 18px;
+        box-shadow:0 10px 24px rgba(29,127,73,0.08);
+      "
+    >
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <div>
+          <div
+            style="
+              display:inline-flex;
+              align-items:center;
+              gap:8px;
+              padding:6px 10px;
+              border-radius:999px;
+              background:#e8f7ee;
+              color:#1d7f49;
+              font-size:12px;
+              font-weight:700;
+            "
+          >
+            ✅ Completed Today
+          </div>
+
+          <div style="margin-top:10px;font-size:18px;font-weight:700;color:#10324d;">
+            Nice work — today’s Daily Learning is complete
+          </div>
+
+          <div style="margin-top:8px;color:#5f7285;font-size:14px;line-height:1.7;">
+            Your progress has been saved. Keep the streak alive tomorrow and continue building XP.
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <div
+            style="
+              min-width:120px;
+              padding:12px 14px;
+              border-radius:14px;
+              background:#fff4dd;
+              color:#9a6a00;
+              text-align:center;
+            "
+          >
+            <div style="font-size:12px;font-weight:700;">TODAY XP</div>
+            <div id="dailyTodayXpValue" style="margin-top:6px;font-size:22px;font-weight:800;">${Number(meta.todayXp || 0)}</div>
+          </div>
+
+          <div
+            style="
+              min-width:120px;
+              padding:12px 14px;
+              border-radius:14px;
+              background:#e8f1fb;
+              color:#0f4f86;
+              text-align:center;
+            "
+          >
+            <div style="font-size:12px;font-weight:700;">STREAK</div>
+            <div id="dailyBannerStreakValue" style="margin-top:6px;font-size:22px;font-weight:800;">${Number(meta.streak || 0)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function renderDailyLearningLeaderboard(items) {
+  if (!Array.isArray(items) || !items.length) {
+    return `
+      <section class="section">
+        <div class="card" style="border:1px solid #dbe8f3;background:#f8fbff;">
+          <div class="pill">Leaderboard</div>
+          <h3 style="margin-top:10px;">No leaderboard data available yet</h3>
+          <p class="muted">Once users start completing Daily Learning cards, rankings will appear here.</p>
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="section">
+      <div
+        class="card"
+        style="
+          border:1px solid #dbe8f3;
+          background:linear-gradient(135deg,#f8fbff 0%, #ffffff 100%);
+          box-shadow:0 12px 28px rgba(15,79,134,0.08);
+        "
+      >
+        <div class="top-strip" style="margin-bottom:12px;align-items:flex-start;">
+          <div>
+            <div class="pill">Leaderboard</div>
+            <h3 style="margin:10px 0 0;">Top Daily Learning Champions</h3>
+            <p class="page-subtitle" style="margin-top:8px;">Ranked by total XP, then current streak, then best streak.</p>
+          </div>
+        </div>
+
+        <div id="dailyLearningLeaderboardList" style="display:grid;gap:10px;">
+          ${items.map(function(item, index) {
+            var medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
+
+            return `
+              <div
+                style="
+                  display:grid;
+                  grid-template-columns:minmax(0, 44px) minmax(0, 1fr) auto auto;
+                  gap:12px;
+                  align-items:center;
+                  padding:14px 16px;
+                  border:1px solid ${item.isCurrentUser ? '#b9d6f2' : '#dbe8f3'};
+                  border-radius:16px;
+                  background:${item.isCurrentUser ? '#eef6ff' : '#ffffff'};
+                "
+              >
+                <div
+                  style="
+                    width:44px;
+                    height:44px;
+                    border-radius:14px;
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    background:${item.isCurrentUser ? '#dbeafe' : '#f6f9fc'};
+                    font-size:20px;
+                  "
+                >
+                  ${medal}
+                </div>
+
+                <div style="min-width:0;">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <div style="font-size:15px;font-weight:700;color:#10324d;">
+                      #${Number(item.rank || 0)} ${escapeHtml(item.name || 'User')}
+                    </div>
+                    ${item.isCurrentUser ? `
+                      <div
+                        style="
+                          padding:4px 8px;
+                          border-radius:999px;
+                          background:#0f4f86;
+                          color:#fff;
+                          font-size:11px;
+                          font-weight:700;
+                        "
+                      >
+                        YOU
+                      </div>
+                    ` : ''}
+                  </div>
+
+                  <div style="margin-top:6px;color:#5f7285;font-size:13px;">
+                    Best streak: ${Number(item.bestStreak || 0)} day${Number(item.bestStreak || 0) === 1 ? '' : 's'}
+                  </div>
+                </div>
+
+                <div
+                  style="
+                    min-width:88px;
+                    text-align:center;
+                    padding:10px 12px;
+                    border-radius:12px;
+                    background:#fff4dd;
+                    color:#9a6a00;
+                  "
+                >
+                  <div style="font-size:11px;font-weight:700;">XP</div>
+                  <div style="margin-top:4px;font-size:18px;font-weight:800;">${Number(item.totalXp || 0)}</div>
+                </div>
+
+                <div
+                  style="
+                    min-width:104px;
+                    text-align:center;
+                    padding:10px 12px;
+                    border-radius:12px;
+                    background:#e8f1fb;
+                    color:#0f4f86;
+                  "
+                >
+                  <div style="font-size:11px;font-weight:700;">STREAK</div>
+                  <div style="margin-top:4px;font-size:18px;font-weight:800;">🔥 ${Number(item.currentStreak || 0)}</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </section>
+  `;
+}
+function refreshDailyLearningLeaderboardDom(items) {
+  var container = document.getElementById('dailyLearningLeaderboardList');
+  if (!container || !Array.isArray(items) || !items.length) return;
+
+  container.innerHTML = items.map(function(item, index) {
+    var medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
+
+    return `
+      <div
+        style="
+          display:grid;
+          grid-template-columns:minmax(0, 44px) minmax(0, 1fr) auto auto;
+          gap:12px;
+          align-items:center;
+          padding:14px 16px;
+          border:1px solid ${item.isCurrentUser ? '#b9d6f2' : '#dbe8f3'};
+          border-radius:16px;
+          background:${item.isCurrentUser ? '#eef6ff' : '#ffffff'};
+        "
+      >
+        <div
+          style="
+            width:44px;
+            height:44px;
+            border-radius:14px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            background:${item.isCurrentUser ? '#dbeafe' : '#f6f9fc'};
+            font-size:20px;
+          "
+        >
+          ${medal}
+        </div>
+
+        <div style="min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:15px;font-weight:700;color:#10324d;">
+              #${Number(item.rank || 0)} ${escapeHtml(item.name || 'User')}
+            </div>
+            ${item.isCurrentUser ? `
+              <div
+                style="
+                  padding:4px 8px;
+                  border-radius:999px;
+                  background:#0f4f86;
+                  color:#fff;
+                  font-size:11px;
+                  font-weight:700;
+                "
+              >
+                YOU
+              </div>
+            ` : ''}
+          </div>
+
+          <div style="margin-top:6px;color:#5f7285;font-size:13px;">
+            Best streak: ${Number(item.bestStreak || 0)} day${Number(item.bestStreak || 0) === 1 ? '' : 's'}
+          </div>
+        </div>
+
+        <div
+          style="
+            min-width:88px;
+            text-align:center;
+            padding:10px 12px;
+            border-radius:12px;
+            background:#fff4dd;
+            color:#9a6a00;
+          "
+        >
+          <div style="font-size:11px;font-weight:700;">XP</div>
+          <div style="margin-top:4px;font-size:18px;font-weight:800;">${Number(item.totalXp || 0)}</div>
+        </div>
+
+        <div
+          style="
+            min-width:104px;
+            text-align:center;
+            padding:10px 12px;
+            border-radius:12px;
+            background:#e8f1fb;
+            color:#0f4f86;
+          "
+        >
+          <div style="font-size:11px;font-weight:700;">STREAK</div>
+          <div style="margin-top:4px;font-size:18px;font-weight:800;">🔥 ${Number(item.currentStreak || 0)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
   function getTrackerBadge(status) {
     const map = {
       'Completed': { label: 'Completed', bg: '#e8f7ee', color: '#1d7f49' },
